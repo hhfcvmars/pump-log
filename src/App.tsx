@@ -945,10 +945,6 @@ function NetworkCard({ request }: { request: NetworkRequest }) {
       </div>
       {expanded ? (
         <div className="net-card-body">
-          <div className="net-section">
-            <div className="net-label">URL</div>
-            <pre className="net-value">{request.url}</pre>
-          </div>
           {request.params ? (
             <div className="net-section">
               <div className="net-section-head">
