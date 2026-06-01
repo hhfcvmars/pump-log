@@ -780,6 +780,7 @@ function parsePumpHistoryRecord(line: string): Omit<PumpHistoryRecord, 'key'> | 
     eventValue: extractField(line, /eventValue\s*=\s*(\d+)/),
     basalUnitPerHour: extractField(line, /basalUnitPerHour\s*=\s*([\d.]+)/),
     bolusUnitPerHour: extractField(line, /bolusUnitPerHour\s*=\s*([\d.]+)/),
+    rawLine: line,
   }
 }
 
