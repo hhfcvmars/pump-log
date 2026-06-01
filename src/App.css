@@ -816,6 +816,13 @@ button:disabled {
   font: 500 11px/1 var(--mono);
 }
 
+.net-code {
+  flex-shrink: 0;
+  font: 600 10px/1 var(--mono);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
 .net-expand {
   flex-shrink: 0;
   color: #4a5568;

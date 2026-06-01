@@ -471,6 +471,12 @@ function FileDetail({
         current.params = extractValue(line, 'RequestParams:')
       } else if (current && line.includes('| Response:')) {
         current.response = extractValue(line, 'Response:')
+        try {
+          const parsed = JSON.parse(current.response)
+          current.code = typeof parsed.code === 'number' ? parsed.code : null
+        } catch {
+          current.code = null
+        }
       } else if (current && line.includes('----------End:')) {
         current.duration = extractValue(line, 'End:')?.replace(/毫秒-+$/, '') + 'ms'
         requests.push({
@@ -481,6 +487,7 @@ function FileDetail({
           params: current.params ?? '',
           response: current.response ?? '',
           duration: current.duration ?? '',
+          code: current.code ?? null,
         })
         current = null
       }
@@ -887,6 +894,7 @@ interface NetworkRequest {
   params: string
   response: string
   duration: string
+  code: number | null
 }
 
 function extractTimestamp(line: string): string {
@@ -911,6 +919,7 @@ function NetworkCard({ request }: { request: NetworkRequest }) {
   const [paramsJson, setParamsJson] = useState(true)
   const [responseJson, setResponseJson] = useState(true)
   const methodColor = request.method === 'POST' ? '#e8a838' : request.method === 'GET' ? '#5b9bd5' : '#7aa2c4'
+  const isError = request.code != null && request.code !== 200
 
   function formatJson(raw: string): string {
     let s = raw
@@ -925,12 +934,13 @@ function NetworkCard({ request }: { request: NetworkRequest }) {
   }
 
   return (
-    <div className="net-card">
+    <div className="net-card" style={isError ? { backgroundColor: '#fff0f0' } : undefined}>
       <div className="net-card-head" onClick={() => setExpanded(!expanded)}>
         <span className="net-time">{request.timestamp.slice(11, 19)}</span>
         <span className="net-method" style={{ color: methodColor }}>{request.method}</span>
         <span className="net-url">{truncateUrl(request.url)}</span>
         <span className="net-duration">{request.duration}</span>
+        {request.code != null ? <span className="net-code" style={isError ? { color: '#e74c3c', fontWeight: 'bold' } : { color: '#27ae60' }}>{request.code}</span> : null}
         <span className="net-expand">{expanded ? '▾' : '▸'}</span>
       </div>
       {expanded ? (
