@@ -25,7 +25,7 @@ type Progress = {
 function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [notificationText, setNotificationText] = useState('')
-  const [password, setPassword] = useState('PDA_D00001')
+  const [password, setPassword] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [bundle, setBundle] = useState<LogBundle | null>(null)
   const [selectedEntryId, setSelectedEntryId] = useState<string>()
