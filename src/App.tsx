@@ -14,9 +14,6 @@ import {
 } from './lib/logBundle'
 import { inferArchiveMetadata, parseUploadNotification } from './lib/notificationParser'
 
-const sampleNotification = `[vcs]2026-05-22 11:21:57
-uploadLog, fileName: PDA_MTM-Z2_D00001_Patch Pump PDA_version2.3.0_.zip, urlPath: https://d3ci4jgewizada.cloudfront.net/vcs/eu/errorlog/cgms/PDA_MTM-Z2_D00001_Patch+Pump+PDA_version2.3.0_.zip`
-
 type ImportState = 'idle' | 'loading' | 'ready' | 'error'
 
 type Progress = {
@@ -27,7 +24,7 @@ type Progress = {
 
 function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [notificationText, setNotificationText] = useState(sampleNotification)
+  const [notificationText, setNotificationText] = useState('')
   const [password, setPassword] = useState('PDA_D00001')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [bundle, setBundle] = useState<LogBundle | null>(null)
