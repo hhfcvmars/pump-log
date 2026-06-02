@@ -1085,6 +1085,15 @@ const NETWORK_CATEGORIES = [
   { key: 'cgmRecordSave', label: 'CGM历史', pattern: 'cgmRecord/saveCgmRecord' },
   { key: 'cgmRecordUpdate', label: 'CGM原始', pattern: 'cgmRecord/updateCgmRecord' },
   { key: 'cgmCalibration', label: 'CGM校准', pattern: 'cgmCalibration/saveCalibration' },
+  { key: 'prescriptionUnreadNum', label: '未读医嘱数目', pattern: 'prescription/queryUnreadPrescriptionNum' },
+  { key: 'prescriptionOverview', label: '医嘱列表', pattern: 'prescription/queryPrescriptionOverviewList' },
+  { key: 'prescriptionDetail', label: '医嘱详情', pattern: 'prescription/queryPrescriptionDetail' },
+  { key: 'prescriptionStatus', label: '医嘱状态更新', pattern: 'prescription/modifyPrescriptionStatus' },
+  { key: 'patientInfo', label: '患者信息', pattern: 'prescription/queryPatientInfoByPatientId' },
+  { key: 'authLogin', label: '登录', pattern: 'pda/auth/login' },
+  { key: 'authChallenge', label: '登录挑战', pattern: 'pda/auth/challenge' },
+  { key: 'systemTimestamp', label: '系统时间', pattern: 'pda/device/currentTimestamp' },
+  { key: 'dataShareList', label: '分享列表', pattern: 'pump/data-share/list' },
 ]
 
 function classifyNetworkRequest(url: string): string {
