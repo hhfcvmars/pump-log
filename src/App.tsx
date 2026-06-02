@@ -15,6 +15,7 @@ import {
   type RawArchiveEntry,
 } from './lib/logBundle'
 import { inferArchiveMetadata, parseUploadNotification } from './lib/notificationParser'
+import { downloadUsbPdaLogArchive } from './lib/usbPdaLogClient'
 import { calculateVirtualWindow } from './lib/virtualLog'
 
 type ImportState = 'idle' | 'loading' | 'ready' | 'error'
@@ -119,6 +120,28 @@ function App() {
       await buildBundle(file, {
         sourceName: metadata.fileName,
         password: nextPassword,
+        serialNumber: metadata.serialNumber,
+        version: metadata.version,
+      })
+    } catch (error) {
+      setStatus('error')
+      setProgress(null)
+      setMessage(getErrorMessage(error))
+    }
+  }
+
+  async function importFromUsb() {
+    setStatus('loading')
+    setProgress({ phase: 'download', percent: 0, label: '正在通过 USB 导出...' })
+    setMessage('正在连接 PDA 并导出日志')
+
+    try {
+      const archive = await downloadUsbPdaLogArchive()
+      const metadata = inferArchiveMetadata(archive.sourceName)
+      setProgress({ phase: 'extract', percent: 0, label: '准备解析 USB 日志...' })
+      await buildBundle(archive.blob, {
+        sourceName: metadata.fileName,
+        password: archive.password ?? metadata.password,
         serialNumber: metadata.serialNumber,
         version: metadata.version,
       })
@@ -286,19 +309,31 @@ function App() {
               <h2>文件列表</h2>
               <p>{bundle ? `${visibleEntries.length}/${bundle.entries.length} 个文件` : '尚未导入'}</p>
             </div>
-            <button
-              type="button"
-              className="pane-import"
-              title="导入日志文件"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="17 8 12 3 7 8" />
-                <line x1="12" y1="3" x2="12" y2="15" />
-              </svg>
-              导入
-            </button>
+            <div className="pane-actions">
+              <button
+                type="button"
+                className="pane-import usb-import"
+                title="通过 USB 从 PDA 导入日志"
+                onClick={importFromUsb}
+                disabled={status === 'loading'}
+              >
+                USB
+              </button>
+              <button
+                type="button"
+                className="pane-import"
+                title="导入日志文件"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={status === 'loading'}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                导入
+              </button>
+            </div>
           </div>
 
           <div className="file-table" role="listbox" aria-label="日志文件列表">
@@ -472,7 +507,12 @@ function FileDetail({
       const columns = Array.from(
         new Set(parsed.flatMap((item: Record<string, unknown>) => Object.keys(item))),
       )
-      return { columns, rows: parsed as Record<string, unknown>[] }
+      const prioCols = ['id', 'hasUpload']
+      const ordered = [
+        ...prioCols.filter((col) => columns.includes(col)),
+        ...columns.filter((col) => !prioCols.includes(col)),
+      ]
+      return { columns: ordered, rows: parsed as Record<string, unknown>[] }
     } catch {
       return null
     }
@@ -893,13 +933,15 @@ function FileDetail({
                   </tr>
                 </thead>
                 <tbody>
-                  {jsonTable.rows.map((row, i) => (
-                    <tr key={i}>
+                  {jsonTable.rows.map((row, i) => {
+                      const notUploaded = row.hasUpload === 0 || row.hasUpload === '0' || row.hasUpload === false
+                      return (
+                    <tr key={i} className={notUploaded ? 'row-not-uploaded' : undefined}>
                       {jsonTable.columns.map((col) => (
                         <td key={col}>{formatJsonCell(row[col])}</td>
                       ))}
                     </tr>
-                  ))}
+                  )})}
                 </tbody>
               </table>
             </div>

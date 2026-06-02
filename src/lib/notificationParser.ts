@@ -52,7 +52,7 @@ export function inferArchiveMetadata(fileName: string, sourcePath = fileName): A
   const normalizedSourcePath = normalizeArchiveFileName(sourcePath)
   const serialNumber = normalizedFileName.match(serialPattern)?.[1]?.toUpperCase()
   const version = normalizedFileName.match(versionPattern)?.[1]
-  const needsPassword = /PDA_MTM/i.test(`${normalizedFileName} ${normalizedSourcePath}`)
+  const needsPassword = /(PDA_MTM|EXPORT_MTM)/i.test(`${normalizedFileName} ${normalizedSourcePath}`)
 
   return {
     fileName: normalizedFileName,

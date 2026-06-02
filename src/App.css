@@ -336,6 +336,13 @@ button:disabled {
   line-height: 1.25;
 }
 
+.pane-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .pane-import {
   display: flex;
   align-items: center;
@@ -354,6 +361,14 @@ button:disabled {
 .pane-import:hover {
   color: var(--heading);
   border-color: var(--accent);
+}
+
+.usb-import {
+  min-width: 44px;
+  justify-content: center;
+  padding: 0 9px;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .compact-input {
@@ -769,6 +784,14 @@ button:disabled {
 
 .row-alarm-high:hover {
   background: rgba(248, 81, 73, 0.25) !important;
+}
+
+.row-not-uploaded {
+  background: rgba(120, 130, 150, 0.1) !important;
+}
+
+.row-not-uploaded:hover {
+  background: rgba(120, 130, 150, 0.18) !important;
 }
 
 .copy-btn {
