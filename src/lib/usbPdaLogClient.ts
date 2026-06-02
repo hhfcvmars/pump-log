@@ -1,3 +1,8 @@
+import {
+  downloadWebUsbPdaLogArchive,
+  isWebUsbPdaLogImportAvailable,
+} from './webUsbPdaLogClient'
+
 export type UsbPdaLogArchive = {
   blob: Blob
   sourceName: string
@@ -6,15 +11,27 @@ export type UsbPdaLogArchive = {
 
 const usbPdaLogEndpoint = '/api/usb/pda-log'
 const fallbackSourceName = 'EXPORT_MTM_USB_PDA_LOG.zip'
-const localOnlyMessage = 'USB 导入仅支持在本机运行 npm run dev 时使用。Vercel 部署在云端，无法访问你电脑上的 USB/ADB 设备。'
+const unavailableMessage = '当前浏览器不支持 WebUSB。请使用 Chrome/Edge，或在本机运行 npm run dev 使用本机 ADB 导入。'
 
 export function isUsbPdaLogImportAvailable(hostname = globalThis.location?.hostname): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  return isWebUsbPdaLogImportAvailable() || isLocalhost(hostname)
 }
 
 export async function downloadUsbPdaLogArchive(hostname?: string): Promise<UsbPdaLogArchive> {
-  if (!isUsbPdaLogImportAvailable(hostname)) {
-    throw new Error(localOnlyMessage)
+  const local = isLocalhost(hostname)
+
+  if (isWebUsbPdaLogImportAvailable()) {
+    try {
+      return await downloadWebUsbPdaLogArchive()
+    } catch (error) {
+      if (!local) {
+        throw error
+      }
+    }
+  }
+
+  if (!local) {
+    throw new Error(unavailableMessage)
   }
 
   const response = await fetch(usbPdaLogEndpoint)
@@ -28,6 +45,10 @@ export async function downloadUsbPdaLogArchive(hostname?: string): Promise<UsbPd
     sourceName: getContentDispositionFileName(response.headers.get('content-disposition')) ?? fallbackSourceName,
     password: response.headers.get('x-pda-log-password') ?? undefined,
   }
+}
+
+function isLocalhost(hostname = globalThis.location?.hostname): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
 }
 
 async function readErrorMessage(response: Response): Promise<string> {

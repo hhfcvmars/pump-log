@@ -314,7 +314,7 @@ function App() {
               <button
                 type="button"
                 className="pane-import usb-import"
-                title={usbImportAvailable ? '通过 USB 从 PDA 导入日志' : 'USB 导入仅支持本机 npm run dev，Vercel 无法访问电脑 USB/ADB'}
+                title={usbImportAvailable ? '通过 USB 从 PDA 导入日志' : '请使用支持 WebUSB 的 Chrome/Edge，或在本机 npm run dev 使用 ADB 导入'}
                 onClick={importFromUsb}
                 disabled={status === 'loading'}
               >
