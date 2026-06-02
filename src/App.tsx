@@ -735,7 +735,7 @@ function FileDetail({
             导出 CSV
           </button>
         ) : null}
-        {entry.truncated ? <span className="warn">文件过大，仅显示前 30 MB</span> : null}
+        {entry.truncated ? <span className="warn">文件过大，仅显示前 100 MB</span> : null}
       </div>
 
       {entry.text ? (

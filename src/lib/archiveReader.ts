@@ -2,7 +2,7 @@ import { BlobReader, BlobWriter, ZipReader } from '@zip.js/zip.js'
 import { isTextLikePath, type RawArchiveEntry } from './logBundle'
 import { isXLogByExtension, isXLogByMagic, parseXLog } from './xlogParser'
 
-const maxPreviewBytes = 30 * 1024 * 1024
+const maxPreviewBytes = 100 * 1024 * 1024
 
 export type ReadArchiveOptions = {
   password: string
