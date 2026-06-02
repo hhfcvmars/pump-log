@@ -573,6 +573,23 @@ function FileDetail({
           </button>
         </div>
         <span className="line-pill">{lineCount} 行</span>
+        {(cgmHistoryFilter || pumpHistoryFilter || pumpAdFilter) ? (
+          <button type="button" className="export-btn" onClick={() => {
+            if (cgmHistoryFilter) {
+              downloadCsv(
+                ['日志时间', 'timeOffset', 'currentTime', 'glucose', 'deviceSn', 'sensorStartTime', 'quality', 'status'],
+                cgmHistoryRecords.map(r => [r.timestamp, r.timeOffset, r.currentTime, r.glucose, r.deviceSn, r.sensorStartTime, r.quality, r.status]),
+                'cgm_history.csv'
+              )
+            } else {
+              downloadCsv(
+                ['日志时间', 'autoMode', 'eventIndex', '剩余电量', '剩余胰岛素', 'datetime', 'eventPort', 'eventType', 'eventLevel', 'eventValue', '基础率', '大剂量', '内容'],
+                historyRecords.map(r => [r!.timestamp, r!.autoMode, r!.eventIndex, r!.remainingCapacity, r!.remainingInsulin, r!.datetime, r!.eventPort, r!.eventType, r!.eventLevel, r!.eventValue, r!.basalUnitPerHour, r!.bolusUnitPerHour, getEventDescription(r!.eventPort, r!.eventType, r!.eventLevel, r!.eventValue)]),
+                'pump_history.csv'
+              )
+            }
+          }}>导出 CSV</button>
+        ) : null}
         {entry.truncated ? <span className="warn">文件过大，仅显示前 30 MB</span> : null}
       </div>
 
@@ -998,6 +1015,21 @@ function downloadEntry(entry: LogEntry) {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function downloadCsv(headers: string[], rows: string[][], filename: string) {
+  const escape = (v: string) => v.includes(',') || v.includes('"') || v.includes('\n') ? `"${v.replace(/"/g, '""')}"` : v
+  const csv = [headers.map(escape).join(','), ...rows.map(row => row.map(escape).join(','))].join('\n')
+  const bom = '\uFEFF'
+  const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
 }
 
 export default App
