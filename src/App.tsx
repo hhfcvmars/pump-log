@@ -15,7 +15,7 @@ import {
   type RawArchiveEntry,
 } from './lib/logBundle'
 import { inferArchiveMetadata, parseUploadNotification } from './lib/notificationParser'
-import { downloadUsbPdaLogArchive } from './lib/usbPdaLogClient'
+import { downloadUsbPdaLogArchive, isUsbPdaLogImportAvailable } from './lib/usbPdaLogClient'
 import { calculateVirtualWindow } from './lib/virtualLog'
 
 type ImportState = 'idle' | 'loading' | 'ready' | 'error'
@@ -37,6 +37,7 @@ function App() {
   const [status, setStatus] = useState<ImportState>('idle')
   const [message, setMessage] = useState('等待导入日志')
   const [progress, setProgress] = useState<Progress | null>(null)
+  const usbImportAvailable = isUsbPdaLogImportAvailable()
 
   const visibleEntries = useMemo(
     () => filterEntries(bundle?.entries ?? [], fileQuery),
@@ -313,7 +314,7 @@ function App() {
               <button
                 type="button"
                 className="pane-import usb-import"
-                title="通过 USB 从 PDA 导入日志"
+                title={usbImportAvailable ? '通过 USB 从 PDA 导入日志' : 'USB 导入仅支持本机 npm run dev，Vercel 无法访问电脑 USB/ADB'}
                 onClick={importFromUsb}
                 disabled={status === 'loading'}
               >

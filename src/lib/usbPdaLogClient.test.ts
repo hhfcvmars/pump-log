@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { downloadUsbPdaLogArchive } from './usbPdaLogClient'
+import { downloadUsbPdaLogArchive, isUsbPdaLogImportAvailable } from './usbPdaLogClient'
 
 describe('downloadUsbPdaLogArchive', () => {
   afterEach(() => {
@@ -19,7 +19,7 @@ describe('downloadUsbPdaLogArchive', () => {
       })),
     )
 
-    await expect(downloadUsbPdaLogArchive()).resolves.toEqual({
+    await expect(downloadUsbPdaLogArchive('localhost')).resolves.toEqual({
       blob,
       sourceName: 'PDA_D00001_Patch Pump PDA_version3.0.0_.zip',
       password: 'PDA_D00001',
@@ -35,6 +35,17 @@ describe('downloadUsbPdaLogArchive', () => {
       })),
     )
 
-    await expect(downloadUsbPdaLogArchive()).rejects.toThrow('未检测到已授权的 ADB 设备')
+    await expect(downloadUsbPdaLogArchive('localhost')).rejects.toThrow('未检测到已授权的 ADB 设备')
+  })
+
+  it('does not request the USB endpoint outside local development', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+
+    expect(isUsbPdaLogImportAvailable('log.fasong.xyz')).toBe(false)
+    await expect(downloadUsbPdaLogArchive('log.fasong.xyz')).rejects.toThrow(
+      'USB 导入仅支持在本机运行 npm run dev 时使用',
+    )
+    expect(fetch).not.toHaveBeenCalled()
   })
 })

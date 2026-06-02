@@ -6,8 +6,17 @@ export type UsbPdaLogArchive = {
 
 const usbPdaLogEndpoint = '/api/usb/pda-log'
 const fallbackSourceName = 'EXPORT_MTM_USB_PDA_LOG.zip'
+const localOnlyMessage = 'USB 导入仅支持在本机运行 npm run dev 时使用。Vercel 部署在云端，无法访问你电脑上的 USB/ADB 设备。'
 
-export async function downloadUsbPdaLogArchive(): Promise<UsbPdaLogArchive> {
+export function isUsbPdaLogImportAvailable(hostname = globalThis.location?.hostname): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+}
+
+export async function downloadUsbPdaLogArchive(hostname?: string): Promise<UsbPdaLogArchive> {
+  if (!isUsbPdaLogImportAvailable(hostname)) {
+    throw new Error(localOnlyMessage)
+  }
+
   const response = await fetch(usbPdaLogEndpoint)
 
   if (!response.ok) {
