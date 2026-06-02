@@ -512,18 +512,26 @@ function FileDetail({
     return requests
   }, [timeFilteredLines, networkFilter])
 
+  const FAILED_KEY = '__failed__'
+
   const categoryCounts = useMemo(() => {
     if (!networkFilter) return new Map<string, number>()
     const counts = new Map<string, number>()
+    let failedCount = 0
     for (const req of networkRequests) {
       counts.set(req.category, (counts.get(req.category) ?? 0) + 1)
+      if (req.code != null && req.code !== 200 && req.code !== 1) failedCount++
     }
+    if (failedCount > 0) counts.set(FAILED_KEY, failedCount)
     return counts
   }, [networkFilter, networkRequests])
 
   const filteredNetworkRequests = useMemo(() => {
     if (!networkFilter) return [] as NetworkRequest[]
     if (!networkSubFilter) return networkRequests
+    if (networkSubFilter === FAILED_KEY) {
+      return networkRequests.filter((req) => req.code != null && req.code !== 200 && req.code !== 1)
+    }
     return networkRequests.filter((req) => req.category === networkSubFilter)
   }, [networkFilter, networkRequests, networkSubFilter])
 
@@ -655,6 +663,15 @@ function FileDetail({
                 >
                   全部<span className="chip-count">{networkRequests.length}</span>
                 </button>
+                {(categoryCounts.get(FAILED_KEY) ?? 0) > 0 ? (
+                  <button
+                    type="button"
+                    className={networkSubFilter === FAILED_KEY ? 'chip active chip-failed' : 'chip chip-failed'}
+                    onClick={() => setNetworkSubFilter(FAILED_KEY)}
+                  >
+                    失败<span className="chip-count">{categoryCounts.get(FAILED_KEY)}</span>
+                  </button>
+                ) : null}
                 {NETWORK_CATEGORIES.filter((cat) => (categoryCounts.get(cat.key) ?? 0) > 0).map((cat) => (
                   <button
                     key={cat.key}

@@ -830,6 +830,33 @@ button:disabled {
   color: #1a1200;
 }
 
+.sub-chips .chip-failed {
+  border-color: rgba(248, 81, 73, 0.3);
+  color: #e25555;
+}
+
+.sub-chips .chip-failed:hover {
+  border-color: rgba(248, 81, 73, 0.6);
+  color: #e25555;
+  background: rgba(248, 81, 73, 0.06);
+}
+
+.sub-chips .chip-failed.active {
+  border-color: #e25555;
+  color: #fff;
+  background: #c0392b;
+}
+
+.sub-chips .chip-failed .chip-count {
+  background: rgba(248, 81, 73, 0.2);
+  color: #e25555;
+}
+
+.sub-chips .chip-failed.active .chip-count {
+  background: rgba(0, 0, 0, 0.2);
+  color: #fff;
+}
+
 .net-card {
   margin-bottom: 6px;
   border: 1px solid #1a2030;
