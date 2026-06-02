@@ -438,14 +438,14 @@ function FileDetail({
     : 100
 
   const historyRecords = useMemo(() => {
-    if (!pumpHistoryFilter && !pumpAdFilter) return []
+    if (!pumpHistoryFilter) return []
     return visibleLines
       .map(({ line, originalIndex }) => {
         const rec = parsePumpHistoryRecord(line)
         return rec ? { ...rec, key: originalIndex, rawLine: line } : null
       })
       .filter(Boolean)
-  }, [visibleLines, pumpHistoryFilter, pumpAdFilter])
+  }, [visibleLines, pumpHistoryFilter])
 
   const cgmHistoryRecords = useMemo(() => {
     if (!cgmHistoryFilter) return [] as CgmHistoryRecord[]
@@ -573,7 +573,7 @@ function FileDetail({
           </button>
         </div>
         <span className="line-pill">{lineCount} 行</span>
-        {(cgmHistoryFilter || pumpHistoryFilter || pumpAdFilter) ? (
+        {(cgmHistoryFilter || pumpHistoryFilter) ? (
           <button type="button" className="export-btn" onClick={() => {
             if (cgmHistoryFilter) {
               downloadCsv(
@@ -647,7 +647,7 @@ function FileDetail({
                 </tbody>
               </table>
             </div>
-          ) : pumpHistoryFilter || pumpAdFilter ? (
+          ) : pumpHistoryFilter ? (
             <div className="history-table-wrap">
               <table className="history-table">
                 <thead>
