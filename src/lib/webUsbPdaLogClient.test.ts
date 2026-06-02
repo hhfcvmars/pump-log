@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createWebUsbExportName,
+  createWebUsbPdaLogErrorMessage,
   selectWebUsbPdaLogEntries,
   streamToBlob,
   type WebUsbPdaLogEntry,
@@ -49,5 +50,13 @@ describe('streamToBlob', () => {
     const blob = await streamToBlob(stream)
 
     await expect(blob.arrayBuffer()).resolves.toEqual(new Uint8Array([1, 2, 3]).buffer)
+  })
+})
+
+describe('createWebUsbPdaLogErrorMessage', () => {
+  it('explains when another program already owns the ADB USB interface', () => {
+    expect(createWebUsbPdaLogErrorMessage(new Error('The device is already in used by another program'))).toContain(
+      '设备已被其他程序占用',
+    )
   })
 })

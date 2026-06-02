@@ -30,36 +30,40 @@ export function isWebUsbPdaLogImportAvailable(): boolean {
 }
 
 export async function downloadWebUsbPdaLogArchive(): Promise<UsbPdaLogArchive> {
-  const manager = AdbDaemonWebUsbDeviceManager.BROWSER
-  if (!manager) {
-    throw new Error('当前浏览器不支持 WebUSB，请使用 Chrome/Edge，并确认页面是 HTTPS 或 localhost')
-  }
-
-  const device = await manager.requestDevice()
-  if (!device) {
-    throw new Error('未选择 USB 设备')
-  }
-
-  const connection = await device.connect()
-  const transport = await AdbDaemonTransport.authenticate({
-    serial: device.serial,
-    connection,
-    credentialStore: new AdbWebCredentialStore('Pump Log'),
-  })
-  const adb = new Adb(transport)
-
   try {
-    const files = await readRecentPdaLogFiles(adb)
-    if (files.length === 0) {
-      throw new Error('未找到符合条件的 PDA 日期日志：仅导入最近 5 天、文件名为 yyyy-MM-dd、且单文件不超过 100MB 的日志')
+    const manager = AdbDaemonWebUsbDeviceManager.BROWSER
+    if (!manager) {
+      throw new Error('当前浏览器不支持 WebUSB，请使用 Chrome/Edge，并确认页面是 HTTPS 或 localhost')
     }
 
-    return {
-      blob: await zipWebUsbFiles(files),
-      sourceName: createWebUsbExportName(adb.serial),
+    const device = await manager.requestDevice()
+    if (!device) {
+      throw new Error('未选择 USB 设备')
     }
-  } finally {
-    await adb.close()
+
+    const connection = await device.connect()
+    const transport = await AdbDaemonTransport.authenticate({
+      serial: device.serial,
+      connection,
+      credentialStore: new AdbWebCredentialStore('Pump Log'),
+    })
+    const adb = new Adb(transport)
+
+    try {
+      const files = await readRecentPdaLogFiles(adb)
+      if (files.length === 0) {
+        throw new Error('未找到符合条件的 PDA 日期日志：仅导入最近 5 天、文件名为 yyyy-MM-dd、且单文件不超过 100MB 的日志')
+      }
+
+      return {
+        blob: await zipWebUsbFiles(files),
+        sourceName: createWebUsbExportName(adb.serial),
+      }
+    } finally {
+      await adb.close()
+    }
+  } catch (error) {
+    throw new Error(createWebUsbPdaLogErrorMessage(error), { cause: error })
   }
 }
 
@@ -76,6 +80,16 @@ export function selectWebUsbPdaLogEntries(entries: WebUsbPdaLogEntry[], now = ne
 export function createWebUsbExportName(serial: string, date = new Date()): string {
   const stamp = date.toISOString().slice(0, 19).replace('T', '_').replace(/:/g, '-')
   return `WEBUSB_MTM_${serial}_${stamp}.zip`
+}
+
+export function createWebUsbPdaLogErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+
+  if (/already in use|already in used|devicebusy/i.test(message)) {
+    return '设备已被其他程序占用。请关闭 Android Studio、设备管理工具等可能占用 ADB 的程序，并在终端执行 adb kill-server 后重新点击 USB。'
+  }
+
+  return message
 }
 
 export async function streamToBlob(stream: ByteStream, type = 'application/octet-stream'): Promise<Blob> {
