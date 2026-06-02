@@ -1201,10 +1201,28 @@ function extractLogMessage(line: string): string {
 
 function NetworkCard({ request }: { request: NetworkRequest }) {
   const [expanded, setExpanded] = useState(false)
+  const [copied, setCopied] = useState(false)
   const [paramsJson, setParamsJson] = useState(true)
   const [responseJson, setResponseJson] = useState(true)
   const methodColor = request.method === 'POST' ? '#e8a838' : request.method === 'GET' ? '#5b9bd5' : '#7aa2c4'
   const isError = request.code != null && request.code !== 200
+
+  function buildFullLog(): string {
+    const parts: string[] = []
+    parts.push(`[${request.timestamp}] ${request.method} ${request.url}`)
+    if (request.duration) parts.push(`耗时: ${request.duration}`)
+    if (request.code != null) parts.push(`状态码: ${request.code}`)
+    if (request.params) parts.push(`\n--- 请求参数 ---\n${request.params}`)
+    if (request.response) parts.push(`\n--- 响应 ---\n${request.response}`)
+    return parts.join('\n')
+  }
+
+  function handleCopy(event: React.MouseEvent) {
+    event.stopPropagation()
+    navigator.clipboard.writeText(buildFullLog())
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
 
   function formatJson(raw: string): string {
     let s = raw
@@ -1224,6 +1242,23 @@ function NetworkCard({ request }: { request: NetworkRequest }) {
         <span className="net-time">{request.timestamp.slice(11, 19)}</span>
         <span className="net-method" style={{ color: methodColor }}>{request.method}</span>
         <span className="net-url">{truncateUrl(request.url)}</span>
+        <button
+          type="button"
+          className="net-copy"
+          title={copied ? '已复制' : '复制完整请求日志'}
+          onClick={handleCopy}
+        >
+          {copied ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#27ae60" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          )}
+        </button>
         <span className="net-duration">{request.duration}</span>
         {request.code != null ? <span className="net-code" style={isError ? { color: '#e74c3c', fontWeight: 'bold' } : { color: '#27ae60' }}>{request.code}</span> : null}
         <span className="net-expand">{expanded ? '▾' : '▸'}</span>

@@ -907,6 +907,32 @@ button:disabled {
   font: 12px/1.4 var(--mono);
 }
 
+.net-copy {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: #5b7a8a;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+
+.net-card-head:hover .net-copy {
+  opacity: 1;
+}
+
+.net-copy:hover {
+  color: #a0aeb8;
+  background: rgba(255, 255, 255, 0.06);
+}
+
 .net-time {
   flex-shrink: 0;
   color: #7aa2c4;
