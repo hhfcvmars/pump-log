@@ -15,6 +15,11 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api\/download/, ''),
       },
+      '/api/pancares-download': {
+        target: 'https://static.pancares.com',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/pancares-download/, ''),
+      },
     },
   },
 })

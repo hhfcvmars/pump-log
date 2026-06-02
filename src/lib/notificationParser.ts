@@ -24,8 +24,8 @@ export type ParsedNotification =
 const fileNamePattern = /fileName:\s*(.+?)(?:,\s*urlPath:|$)/i
 const urlPattern = /urlPath:\s*(\S+)/i
 const uploadTimePattern = /\[vcs\](\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/i
-const serialPattern = /(?:^|[_\s-])(D\d{4,})(?:[_\s.-]|$)/i
-const versionPattern = /version(\d+(?:\.\d+)+)/i
+const serialPattern = /(?:^|[_\s-])(D\d{3,}[A-Z]?\d*)(?:[_\s.-]|$)/i
+const versionPattern = /(?:version|_)(\d+(?:\.\d+)+)(?=[_.-]|$)/i
 
 export function parseUploadNotification(text: string): ParsedNotification {
   const uploadedAt = text.match(uploadTimePattern)?.[1]
@@ -41,22 +41,24 @@ export function parseUploadNotification(text: string): ParsedNotification {
   }
 
   return {
-    ...inferArchiveMetadata(fileName),
+    ...inferArchiveMetadata(fileName, urlPath),
     uploadedAt,
     urlPath,
   }
 }
 
-export function inferArchiveMetadata(fileName: string): ArchiveMetadata {
+export function inferArchiveMetadata(fileName: string, sourcePath = fileName): ArchiveMetadata {
   const normalizedFileName = normalizeArchiveFileName(fileName)
+  const normalizedSourcePath = normalizeArchiveFileName(sourcePath)
   const serialNumber = normalizedFileName.match(serialPattern)?.[1]?.toUpperCase()
   const version = normalizedFileName.match(versionPattern)?.[1]
+  const needsPassword = /PDA_MTM/i.test(`${normalizedFileName} ${normalizedSourcePath}`)
 
   return {
     fileName: normalizedFileName,
     serialNumber,
     version,
-    password: buildPassword(serialNumber),
+    password: needsPassword ? buildPassword(serialNumber) : '',
   }
 }
 

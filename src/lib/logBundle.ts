@@ -55,6 +55,8 @@ const textExtensions = new Set([
   'properties',
   'text',
   'txt',
+  'xcrash',
+  'xlog',
   'xml',
 ])
 
@@ -180,7 +182,7 @@ function getTypeLabel(extension: string, canPreview: boolean): string {
     return '二进制/未知'
   }
 
-  if (extension === 'log') {
+  if (extension === 'log' || extension === 'xlog') {
     return '日志'
   }
 

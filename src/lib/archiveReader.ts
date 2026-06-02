@@ -1,5 +1,6 @@
 import { BlobReader, BlobWriter, ZipReader } from '@zip.js/zip.js'
 import { isTextLikePath, type RawArchiveEntry } from './logBundle'
+import { isXLogByExtension, isXLogByMagic, parseXLog } from './xlogParser'
 
 const maxPreviewBytes = 30 * 1024 * 1024
 
@@ -59,10 +60,7 @@ export async function readArchive(
   options: ReadArchiveOptions,
   onProgress?: ProgressCallback,
 ): Promise<RawArchiveEntry[]> {
-  if (!options.password) {
-    throw new Error('请输入 zip 密码后再解析日志')
-  }
-
+  // Allow empty password for unencrypted zips (e.g. vcs/cgms archives).
   const reader = new ZipReader(new BlobReader(blob))
 
   try {
@@ -98,9 +96,10 @@ export async function readArchive(
 
         if (shouldPreview) {
           if (truncated) {
-            text = await entryBlob.slice(0, maxPreviewBytes).text()
+            const slice = entryBlob.slice(0, maxPreviewBytes)
+            text = await tryParseXLog(path, slice)
           } else {
-            text = await entryBlob.text()
+            text = await tryParseXLog(path, entryBlob)
           }
         }
       } catch (error) {
@@ -137,6 +136,36 @@ function createArchiveErrorMessage(error: unknown, password: string): string {
   return `解压失败：${reason}。请确认密码 ${password} 是否正确，或该 zip 加密格式是否受浏览器解析库支持。`
 }
 
+/**
+ * Attempt to parse a blob as xlog.  Falls back to reading as plain text when
+ * the blob is not a recognised xlog file.
+ */
+async function tryParseXLog(path: string, blob: Blob): Promise<string> {
+  const suspect = isXLogByExtension(path)
+
+  if (!suspect) {
+    // No xlog extension – skip the magic check unless the file is small.
+    if (blob.size > 256 * 1024) {
+      return blob.text()
+    }
+  }
+
+  const buf = await blob.arrayBuffer()
+  const bytes = new Uint8Array(buf)
+
+  if (!isXLogByMagic(bytes)) {
+    return blob.text()
+  }
+
+  try {
+    return await parseXLog(bytes)
+  } catch (xlogError) {
+    const reason = xlogError instanceof Error ? xlogError.message : String(xlogError)
+    const raw = await blob.text()
+    return `[⚠ xlog 解析失败] ${reason}\n\n--- 以下为文件原始内容（可能为二进制乱码）---\n\n${raw}`
+  }
+}
+
 function rewriteForProxy(url: string): string {
   if (typeof window === 'undefined') return url
   const isDev = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
@@ -146,6 +175,9 @@ function rewriteForProxy(url: string): string {
     const parsed = new URL(url)
     if (parsed.hostname === 'd3ci4jgewizada.cloudfront.net') {
       return `/api/download${parsed.pathname}${parsed.search}`
+    }
+    if (parsed.hostname === 'static.pancares.com') {
+      return `/api/pancares-download${parsed.pathname}${parsed.search}`
     }
   } catch {
     // not a valid URL, return as-is

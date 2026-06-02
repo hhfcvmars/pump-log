@@ -5,6 +5,8 @@ import {
   readArchive,
   type ProgressCallback,
 } from './lib/archiveReader'
+import { getXLogTextDownloadName } from './lib/downloadName'
+import { isXLogByMagic, parseXLog } from './lib/xlogParser'
 import {
   createLogBundle,
   filterEntries,
@@ -13,6 +15,7 @@ import {
   type RawArchiveEntry,
 } from './lib/logBundle'
 import { inferArchiveMetadata, parseUploadNotification } from './lib/notificationParser'
+import { calculateVirtualWindow } from './lib/virtualLog'
 
 type ImportState = 'idle' | 'loading' | 'ready' | 'error'
 
@@ -25,7 +28,6 @@ type Progress = {
 function App() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [notificationText, setNotificationText] = useState('')
-  const [password, setPassword] = useState('')
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [bundle, setBundle] = useState<LogBundle | null>(null)
   const [selectedEntryId, setSelectedEntryId] = useState<string>()
@@ -79,8 +81,7 @@ function App() {
       return
     }
 
-    const nextPassword = password || parsed.password
-    setPassword(nextPassword)
+    const nextPassword = parsed.password
     setStatus('loading')
     setProgress({ phase: 'download', percent: 0, label: '连接中...' })
     setMessage(`正在下载 ${parsed.fileName}`)
@@ -109,8 +110,7 @@ function App() {
     }
 
     const metadata = inferArchiveMetadata(file.name)
-    const nextPassword = password || metadata.password
-    setPassword(nextPassword)
+    const nextPassword = metadata.password
     setStatus('loading')
     setProgress({ phase: 'extract', percent: 0, label: '准备解压...' })
     setMessage(`正在解析 ${file.name}`)
@@ -153,18 +153,14 @@ function App() {
   }
 
   function handleLocalFile(file: File) {
-    if (/\.txt$/i.test(file.name)) {
+    if (/\.(txt|xlog)$/i.test(file.name)) {
       void importTextFile(file)
       return
     }
 
-    const metadata = inferArchiveMetadata(file.name)
     setSelectedFile(file)
-    setPassword((current) => current || metadata.password)
 
-    if (metadata.password || password) {
-      void importLocalFile(file)
-    }
+    void importLocalFile(file)
   }
 
   async function importTextFile(file: File) {
@@ -173,7 +169,20 @@ function App() {
     setMessage(`正在读取 ${file.name}`)
 
     try {
-      const text = await file.text()
+      let text: string
+
+      if (/\.xlog$/i.test(file.name)) {
+        const buf = await file.arrayBuffer()
+        const bytes = new Uint8Array(buf)
+        if (isXLogByMagic(bytes)) {
+          text = await parseXLog(bytes)
+        } else {
+          text = await file.text()
+        }
+      } else {
+        text = await file.text()
+      }
+
       const entry: RawArchiveEntry = {
         path: file.name,
         size: file.size,
@@ -259,7 +268,7 @@ function App() {
           ref={fileInputRef}
           className="file-input"
           type="file"
-          accept=".zip,.txt,application/zip,text/plain"
+          accept=".zip,.txt,.xlog,application/zip,text/plain"
           onChange={(event) => {
             const file = event.target.files?.item(0)
 
@@ -349,7 +358,8 @@ function App() {
   )
 }
 
-const CHUNK_SIZE = 5000
+const LOG_ROW_HEIGHT = 22
+const LOG_OVERSCAN_ROWS = 40
 
 function FileDetail({
   entry,
@@ -371,8 +381,9 @@ function FileDetail({
   const [deviceInfoFilter, setDeviceInfoFilter] = useState(false)
   const [cgmHistoryFilter, setCgmHistoryFilter] = useState(false)
   const [networkSubFilter, setNetworkSubFilter] = useState('')
-  const [renderedCount, setRenderedCount] = useState(CHUNK_SIZE)
-  const [isLoading, setIsLoading] = useState(false)
+  const logViewportRef = useRef<HTMLDivElement>(null)
+  const [logScrollTop, setLogScrollTop] = useState(0)
+  const [logViewportHeight, setLogViewportHeight] = useState(600)
   const normalizedQuery = contentQuery.trim().toLowerCase()
 
   const timeFilteredLines = useMemo(() => {
@@ -397,50 +408,57 @@ function FileDetail({
   }, [lines, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter])
 
   useEffect(() => {
-    if (timeFilteredLines.length <= CHUNK_SIZE) {
-      setRenderedCount(timeFilteredLines.length)
-      setIsLoading(false)
-      return
+    const node = logViewportRef.current
+    if (!node) return
+
+    function updateViewportHeight() {
+      setLogViewportHeight(node?.clientHeight || 600)
     }
 
-    setRenderedCount(CHUNK_SIZE)
-    setIsLoading(true)
+    updateViewportHeight()
+    const resizeObserver = new ResizeObserver(updateViewportHeight)
+    resizeObserver.observe(node)
+    return () => resizeObserver.disconnect()
+  }, [entry.id, networkFilter, cgmHistoryFilter, pumpHistoryFilter, pumpAdFilter])
 
-    let current = CHUNK_SIZE
-    let rafId: number
+  useEffect(() => {
+    const node = logViewportRef.current
+    if (!node) return
+    node.scrollTop = 0
+    setLogScrollTop(0)
+  }, [entry.id, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter])
 
-    function renderNextChunk() {
-      current = Math.min(current + CHUNK_SIZE, timeFilteredLines.length)
-      setRenderedCount(current)
-
-      if (current < timeFilteredLines.length) {
-        rafId = requestAnimationFrame(renderNextChunk)
-      } else {
-        setIsLoading(false)
-      }
-    }
-
-    rafId = requestAnimationFrame(renderNextChunk)
+  useEffect(() => {
+    if (networkFilter) return
+    const rafId = requestAnimationFrame(() => setNetworkSubFilter(''))
     return () => cancelAnimationFrame(rafId)
-  }, [timeFilteredLines.length, entry.id, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter])
-
-  useEffect(() => {
-    if (!normalizedQuery) return
-    const raf = requestAnimationFrame(() => {
-      const el = document.querySelector('.log-viewer code.hit')
-      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
-    })
-    return () => cancelAnimationFrame(raf)
-  }, [normalizedQuery, entry.id])
-
-  useEffect(() => {
-    if (!networkFilter) setNetworkSubFilter('')
   }, [networkFilter])
 
-  const visibleLines = timeFilteredLines.slice(0, renderedCount)
-  const loadPercent = timeFilteredLines.length > 0
-    ? Math.round((renderedCount / timeFilteredLines.length) * 100)
-    : 100
+  const firstMatchedLineIndex = useMemo(() => {
+    if (!normalizedQuery) return -1
+    return timeFilteredLines.findIndex(({ line }) =>
+      line.toLowerCase().includes(normalizedQuery),
+    )
+  }, [timeFilteredLines, normalizedQuery])
+
+  useEffect(() => {
+    if (!normalizedQuery || firstMatchedLineIndex < 0) return
+    const node = logViewportRef.current
+    if (!node) return
+    const nextScrollTop = Math.max(0, (firstMatchedLineIndex - 4) * LOG_ROW_HEIGHT)
+    node.scrollTop = nextScrollTop
+    setLogScrollTop(nextScrollTop)
+  }, [normalizedQuery, firstMatchedLineIndex, entry.id])
+
+  const visibleLines = timeFilteredLines
+  const virtualWindow = calculateVirtualWindow(
+    timeFilteredLines.length,
+    logScrollTop,
+    logViewportHeight,
+    LOG_ROW_HEIGHT,
+    LOG_OVERSCAN_ROWS,
+  )
+  const virtualLines = timeFilteredLines.slice(virtualWindow.start, virtualWindow.end)
 
   const historyRecords = useMemo(() => {
     if (!pumpHistoryFilter) return []
@@ -482,7 +500,13 @@ function FileDetail({
       } else if (current && line.includes('| Request{')) {
         const parsed = parseRequestLine(line)
         if (parsed) { current.method = parsed.method; current.url = parsed.url }
+        // New format (PDA_API): extract tags={...} from the Request line as params
+        const tagsIdx = line.indexOf('tags=')
+        if (tagsIdx !== -1) {
+          current.params = line.slice(tagsIdx + 5).trim()
+        }
       } else if (current && line.includes('| RequestParams:{')) {
+        // Old format: explicit RequestParams line overrides any tags extraction
         current.params = extractValue(line, 'RequestParams:')
       } else if (current && line.includes('| Response:')) {
         current.response = extractValue(line, 'Response:')
@@ -507,6 +531,9 @@ function FileDetail({
           category: classifyNetworkRequest(url),
         })
         current = null
+      } else if (current && !current.response) {
+        // Continuation line between Request and Response — long content split by logger
+        current.params = (current.params ?? '') + extractLogMessage(line)
       }
     }
     return requests
@@ -641,18 +668,6 @@ function FileDetail({
 
       {entry.text ? (
         <div className="log-container">
-          {isLoading ? (
-            <div className="loading-overlay">
-              <div className="loading-box">
-                <div className="loading-spinner" />
-                <p>正在加载内容...</p>
-                <div className="loading-progress">
-                  <div style={{ width: `${loadPercent}%` }} />
-                </div>
-                <small>{renderedCount.toLocaleString()} / {timeFilteredLines.length.toLocaleString()} 行</small>
-              </div>
-            </div>
-          ) : null}
           {networkFilter ? (
             <>
               <div className="sub-chips">
@@ -837,17 +852,33 @@ function FileDetail({
               </table>
             </div>
           ) : (
-            <pre className="log-viewer">
-              {visibleLines.map(({ line, originalIndex }) => {
-                const matched = normalizedQuery && line.toLowerCase().includes(normalizedQuery)
-                return (
-                  <code key={`${entry.id}-${originalIndex}`} className={matched ? 'hit' : undefined}>
-                    <span>{originalIndex + 1}</span>
-                    {line || ' '}
-                  </code>
-                )
-              })}
-            </pre>
+            <div
+              ref={logViewportRef}
+              className="log-viewer"
+              role="log"
+              aria-label={`${entry.name} 日志内容`}
+              onScroll={(event) => setLogScrollTop(event.currentTarget.scrollTop)}
+            >
+              <div
+                className="log-virtual-spacer"
+                style={{ height: `${virtualWindow.totalHeight}px` }}
+              >
+                <div
+                  className="log-virtual-window"
+                  style={{ transform: `translateY(${virtualWindow.offsetTop}px)` }}
+                >
+                  {virtualLines.map(({ line, originalIndex }) => {
+                    const matched = normalizedQuery && line.toLowerCase().includes(normalizedQuery)
+                    return (
+                      <code key={`${entry.id}-${originalIndex}`} className={matched ? 'hit' : undefined}>
+                        <span>{originalIndex + 1}</span>
+                        {line || ' '}
+                      </code>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
           )}
         </div>
       ) : (
@@ -910,10 +941,10 @@ interface PumpHistoryRecord {
 }
 
 function parsePumpHistoryRecord(line: string): Omit<PumpHistoryRecord, 'key'> | null {
-  const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})/)
-  if (!tsMatch) return null
+  const ts = extractTimestamp(line)
+  if (!ts) return null
   return {
-    timestamp: tsMatch[1],
+    timestamp: ts,
     autoMode: extractField(line, /autoMode\s*=\s*(true|false)/),
     eventIndex: extractField(line, /eventIndex\s*=\s*(\d+)/),
     remainingCapacity: extractField(line, /remainingCapacity\s*=\s*(\d+)/),
@@ -999,10 +1030,10 @@ interface PumpAdRecord {
 }
 
 function parsePumpAdRecord(line: string): Omit<PumpAdRecord, 'key'> | null {
-  const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})/)
-  if (!tsMatch) return null
+  const ts = extractTimestamp(line)
+  if (!ts) return null
   return {
-    timestamp: tsMatch[1],
+    timestamp: ts,
     datetime: extractField(line, /datetime\s*=\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/),
     rssi: extractField(line, /rssi\s*=\s*(-?\d+)/),
     deviceSn: extractField(line, /deviceSn\s*=\s*'(\w+)'/),
@@ -1046,10 +1077,10 @@ interface CgmHistoryRecord {
 }
 
 function parseCgmHistoryRecord(line: string): Omit<CgmHistoryRecord, 'key'> | null {
-  const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})/)
-  if (!tsMatch) return null
+  const ts = extractTimestamp(line)
+  if (!ts) return null
   return {
-    timestamp: tsMatch[1],
+    timestamp: ts,
     timeOffset: extractField(line, /timeOffset\s*=\s*(\d+)/),
     currentTime: extractField(line, /currentTime\s*=\s*(.+?),/),
     glucose: extractField(line, /glucose\s*=\s*(\d+)/),
@@ -1116,8 +1147,16 @@ interface NetworkRequest {
 }
 
 function extractTimestamp(line: string): string {
-  const m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})/)
-  return m?.[1] ?? ''
+  // Format 1 — mars xlog (parsed .xlog): YYYY-MM-DD HH:MM:SS.ms at line start
+  let m = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})/)
+  if (m) return m[1]
+
+  // Format 2 — Android logcat (.log / adb output):
+  //   [L][YYYY-MM-DD TZ HH:MM:SS.ms]  e.g. [D][2026-05-20 +80 10:38:21.574]
+  m = line.match(/\[.\]\[(\d{4}-\d{2}-\d{2})\s*[+-]\d+\s*(\d{2}:\d{2}:\d{2}\.\d{3})\]/)
+  if (m) return `${m[1]} ${m[2]}`
+
+  return ''
 }
 
 function parseRequestLine(line: string): { method: string; url: string } | null {
@@ -1130,6 +1169,34 @@ function extractValue(line: string, prefix: string): string {
   const idx = line.indexOf(prefix)
   if (idx === -1) return ''
   return line.slice(idx + prefix.length).trim()
+}
+
+/**
+ * Strip logcat / mars-xlog envelope to get raw message content.
+ * Used for continuation lines where the logger split a long message
+ * across multiple log entries.
+ *
+ * Logcat:  [L][timestamp][pid,tid][TAG][, , 0][message
+ * Mars:    timestamp L|pid,tid|TAG|message
+ */
+function extractLogMessage(line: string): string {
+  // Logcat: find message after the 5th bracket pair, e.g. ][, , 0][
+  const logcatMatch = line.match(/\]\[, , \d\]\[(.+)/)
+  if (logcatMatch) return logcatMatch[1]
+
+  // Mars xlog: find message after the 3rd `|`
+  const firstPipe = line.indexOf('|')
+  if (firstPipe !== -1) {
+    const secondPipe = line.indexOf('|', firstPipe + 1)
+    if (secondPipe !== -1) {
+      const thirdPipe = line.indexOf('|', secondPipe + 1)
+      if (thirdPipe !== -1) {
+        return line.slice(thirdPipe + 1)
+      }
+    }
+  }
+
+  return line
 }
 
 function NetworkCard({ request }: { request: NetworkRequest }) {
@@ -1203,11 +1270,19 @@ function truncateLines(text: string, maxLines: number): string {
 }
 
 function downloadEntry(entry: LogEntry) {
-  if (!entry.data) return
-  const url = URL.createObjectURL(entry.data)
+  const downloadBlob =
+    entry.extension === 'xlog' && entry.text
+      ? new Blob([entry.text], { type: 'text/plain;charset=utf-8' })
+      : entry.data
+
+  if (!downloadBlob) return
+
+  const url = URL.createObjectURL(downloadBlob)
   const a = document.createElement('a')
   a.href = url
-  a.download = entry.name
+  a.download = entry.extension === 'xlog'
+    ? getXLogTextDownloadName(entry.name)
+    : entry.name
   document.body.appendChild(a)
   a.click()
   document.body.removeChild(a)
