@@ -153,7 +153,7 @@ function App() {
   }
 
   function handleLocalFile(file: File) {
-    if (/\.(txt|xlog)$/i.test(file.name)) {
+    if (/\.(txt|xlog|json)$/i.test(file.name)) {
       void importTextFile(file)
       return
     }
@@ -268,7 +268,7 @@ function App() {
           ref={fileInputRef}
           className="file-input"
           type="file"
-          accept=".zip,.txt,.xlog,application/zip,text/plain"
+          accept=".zip,.txt,.xlog,.json,application/zip,text/plain,application/json"
           onChange={(event) => {
             const file = event.target.files?.item(0)
 
@@ -459,6 +459,24 @@ function FileDetail({
     LOG_OVERSCAN_ROWS,
   )
   const virtualLines = timeFilteredLines.slice(virtualWindow.start, virtualWindow.end)
+
+  const jsonTable = useMemo(() => {
+    if (entry.extension !== 'json') return null
+    const raw = entry.text
+    if (!raw) return null
+    try {
+      const parsed = JSON.parse(raw)
+      if (!Array.isArray(parsed) || parsed.length === 0) return null
+      if (!parsed.every((item) => item !== null && typeof item === 'object' && !Array.isArray(item))) return null
+
+      const columns = Array.from(
+        new Set(parsed.flatMap((item: Record<string, unknown>) => Object.keys(item))),
+      )
+      return { columns, rows: parsed as Record<string, unknown>[] }
+    } catch {
+      return null
+    }
+  }, [entry])
 
   const historyRecords = useMemo(() => {
     if (!pumpHistoryFilter) return []
@@ -661,7 +679,20 @@ function FileDetail({
                 'pump_history.csv'
               )
             }
-          }}>导出 CSV</button>
+          }}>
+            导出 CSV
+          </button>
+        ) : null}
+        {jsonTable ? (
+          <button type="button" className="export-btn" onClick={() => {
+            downloadCsv(
+              jsonTable.columns,
+              jsonTable.rows.map((row) => jsonTable.columns.map((col) => formatJsonCell(row[col]))),
+              entry.name.replace(/\.json$/i, '') + '.csv',
+            )
+          }}>
+            导出 CSV
+          </button>
         ) : null}
         {entry.truncated ? <span className="warn">文件过大，仅显示前 30 MB</span> : null}
       </div>
@@ -848,6 +879,27 @@ function FileDetail({
                       <td>{rec.bolusUnitPerHour}</td>
                     </tr>
                   )})}
+                </tbody>
+              </table>
+            </div>
+          ) : jsonTable ? (
+            <div className="history-table-wrap">
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    {jsonTable.columns.map((col) => (
+                      <th key={col}>{col}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {jsonTable.rows.map((row, i) => (
+                    <tr key={i}>
+                      {jsonTable.columns.map((col) => (
+                        <td key={col}>{formatJsonCell(row[col])}</td>
+                      ))}
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -1291,6 +1343,27 @@ function NetworkCard({ request }: { request: NetworkRequest }) {
       ) : null}
     </div>
   )
+}
+
+function formatJsonCell(value: unknown): string {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'object') return JSON.stringify(value)
+  const str = String(value)
+  const dateStr = formatTimestamp(str)
+  if (dateStr) return dateStr
+  return str
+}
+
+function formatTimestamp(value: string): string | null {
+  if (!/^\d{10,13}$/.test(value)) return null
+  const n = parseInt(value, 10)
+  const ms = n > 9999999999 ? n : n * 1000
+  const d = new Date(ms)
+  if (isNaN(d.getTime())) return null
+  const year = d.getFullYear()
+  if (year < 2020 || year > 2100) return null
+  const pad = (num: number) => String(num).padStart(2, '0')
+  return `${year}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
 function truncateUrl(url: string): string {

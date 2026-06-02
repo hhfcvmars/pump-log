@@ -16,7 +16,7 @@
   background:
     radial-gradient(ellipse 80% 60% at 10% 50%, rgba(232, 168, 56, 0.04), transparent),
     var(--panel);
-  padding: 8px 16px 10px 10px;
+  padding: 16px 24px 18px 20px;
 }
 
 .import-left {
