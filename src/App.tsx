@@ -370,6 +370,7 @@ function FileDetail({
   const [networkFilter, setNetworkFilter] = useState(false)
   const [deviceInfoFilter, setDeviceInfoFilter] = useState(false)
   const [cgmHistoryFilter, setCgmHistoryFilter] = useState(false)
+  const [networkSubFilter, setNetworkSubFilter] = useState('')
   const [renderedCount, setRenderedCount] = useState(CHUNK_SIZE)
   const [isLoading, setIsLoading] = useState(false)
   const normalizedQuery = contentQuery.trim().toLowerCase()
@@ -432,6 +433,10 @@ function FileDetail({
     return () => cancelAnimationFrame(raf)
   }, [normalizedQuery, entry.id])
 
+  useEffect(() => {
+    if (!networkFilter) setNetworkSubFilter('')
+  }, [networkFilter])
+
   const visibleLines = timeFilteredLines.slice(0, renderedCount)
   const loadPercent = timeFilteredLines.length > 0
     ? Math.round((renderedCount / timeFilteredLines.length) * 100)
@@ -446,6 +451,16 @@ function FileDetail({
       })
       .filter(Boolean)
   }, [visibleLines, pumpHistoryFilter])
+
+  const pumpAdRecords = useMemo(() => {
+    if (!pumpAdFilter) return [] as PumpAdRecord[]
+    return visibleLines
+      .map(({ line, originalIndex }) => {
+        const rec = parsePumpAdRecord(line)
+        return rec ? { ...rec, key: originalIndex } : null
+      })
+      .filter(Boolean) as PumpAdRecord[]
+  }, [visibleLines, pumpAdFilter])
 
   const cgmHistoryRecords = useMemo(() => {
     if (!cgmHistoryFilter) return [] as CgmHistoryRecord[]
@@ -479,21 +494,38 @@ function FileDetail({
         }
       } else if (current && line.includes('----------End:')) {
         current.duration = extractValue(line, 'End:')?.replace(/毫秒-+$/, '') + 'ms'
+        const url = current.url ?? ''
         requests.push({
           key: current.key!,
           timestamp: current.timestamp ?? '',
           method: current.method ?? '',
-          url: current.url ?? '',
+          url,
           params: current.params ?? '',
           response: current.response ?? '',
           duration: current.duration ?? '',
           code: current.code ?? null,
+          category: classifyNetworkRequest(url),
         })
         current = null
       }
     }
     return requests
   }, [timeFilteredLines, networkFilter])
+
+  const categoryCounts = useMemo(() => {
+    if (!networkFilter) return new Map<string, number>()
+    const counts = new Map<string, number>()
+    for (const req of networkRequests) {
+      counts.set(req.category, (counts.get(req.category) ?? 0) + 1)
+    }
+    return counts
+  }, [networkFilter, networkRequests])
+
+  const filteredNetworkRequests = useMemo(() => {
+    if (!networkFilter) return [] as NetworkRequest[]
+    if (!networkSubFilter) return networkRequests
+    return networkRequests.filter((req) => req.category === networkSubFilter)
+  }, [networkFilter, networkRequests, networkSubFilter])
 
   return (
     <>
@@ -573,13 +605,19 @@ function FileDetail({
           </button>
         </div>
         <span className="line-pill">{lineCount} 行</span>
-        {(cgmHistoryFilter || pumpHistoryFilter) ? (
+        {(cgmHistoryFilter || pumpHistoryFilter || pumpAdFilter) ? (
           <button type="button" className="export-btn" onClick={() => {
             if (cgmHistoryFilter) {
               downloadCsv(
                 ['日志时间', 'timeOffset', 'currentTime', 'glucose', 'deviceSn', 'sensorStartTime', 'quality', 'status'],
                 cgmHistoryRecords.map(r => [r.timestamp, r.timeOffset, r.currentTime, r.glucose, r.deviceSn, r.sensorStartTime, r.quality, r.status]),
                 'cgm_history.csv'
+              )
+            } else if (pumpAdFilter) {
+              downloadCsv(
+                ['日志时间', 'Pump时间', 'RSSI', 'deviceSn', 'autoMode', 'eventIndex', '剩余电量', '剩余胰岛素', 'eventPort', 'eventType', 'eventLevel', 'eventValue', 'glucose', '基础率', '大剂量'],
+                pumpAdRecords.map(r => [r.timestamp, r.datetime, r.rssi, r.deviceSn, r.autoMode, r.eventIndex, r.remainingCapacity, r.remainingInsulin, r.eventPort, r.eventType, r.eventLevel, r.eventValue, r.glucose, r.basalUnitPerHour, r.bolusUnitPerHour]),
+                'pump_ad.csv'
               )
             } else {
               downloadCsv(
@@ -608,14 +646,35 @@ function FileDetail({
             </div>
           ) : null}
           {networkFilter ? (
-            <div className="network-list">
-              {networkRequests.map((req) => (
-                <NetworkCard key={req.key} request={req} />
-              ))}
-              {networkRequests.length === 0 ? (
-                <div className="detail-empty"><p>没有匹配的网络请求</p></div>
-              ) : null}
-            </div>
+            <>
+              <div className="sub-chips">
+                <button
+                  type="button"
+                  className={!networkSubFilter ? 'chip active' : 'chip'}
+                  onClick={() => setNetworkSubFilter('')}
+                >
+                  全部<span className="chip-count">{networkRequests.length}</span>
+                </button>
+                {NETWORK_CATEGORIES.filter((cat) => (categoryCounts.get(cat.key) ?? 0) > 0).map((cat) => (
+                  <button
+                    key={cat.key}
+                    type="button"
+                    className={networkSubFilter === cat.key ? 'chip active' : 'chip'}
+                    onClick={() => setNetworkSubFilter(cat.key)}
+                  >
+                    {cat.label}<span className="chip-count">{categoryCounts.get(cat.key)}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="network-list">
+                {filteredNetworkRequests.map((req) => (
+                  <NetworkCard key={req.key} request={req} />
+                ))}
+                {filteredNetworkRequests.length === 0 ? (
+                  <div className="detail-empty"><p>没有匹配的网络请求</p></div>
+                ) : null}
+              </div>
+            </>
           ) : cgmHistoryFilter ? (
             <div className="history-table-wrap">
               <table className="history-table">
@@ -707,6 +766,54 @@ function FileDetail({
                           </svg>
                         </button>
                       </td>
+                    </tr>
+                  )})}
+                </tbody>
+              </table>
+            </div>
+          ) : pumpAdFilter ? (
+            <div className="history-table-wrap">
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    <th>日志时间</th>
+                    <th>Pump时间</th>
+                    <th>RSSI</th>
+                    <th>deviceSn</th>
+                    <th>autoMode</th>
+                    <th>eventIndex</th>
+                    <th>剩余电量</th>
+                    <th>剩余胰岛素</th>
+                    <th>eventPort</th>
+                    <th>eventType</th>
+                    <th>eventLevel</th>
+                    <th>eventValue</th>
+                    <th>glucose</th>
+                    <th>基础率</th>
+                    <th>大剂量</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pumpAdRecords.map((rec) => {
+                    const level = parseInt(rec.eventLevel, 10)
+                    const rowClass = level === 2 ? 'row-alarm-high' : level === 1 ? 'row-alarm-low' : undefined
+                    return (
+                    <tr key={rec.key} className={rowClass}>
+                      <td>{rec.timestamp}</td>
+                      <td>{rec.datetime}</td>
+                      <td>{rec.rssi}</td>
+                      <td>{rec.deviceSn}</td>
+                      <td>{rec.autoMode}</td>
+                      <td>{rec.eventIndex}</td>
+                      <td>{rec.remainingCapacity}</td>
+                      <td>{rec.remainingInsulin}</td>
+                      <td>{rec.eventPort}</td>
+                      <td>{rec.eventType}</td>
+                      <td>{rec.eventLevel}</td>
+                      <td>{rec.eventValue}</td>
+                      <td>{rec.glucose === 'null' ? '-' : rec.glucose}</td>
+                      <td>{rec.basalUnitPerHour}</td>
+                      <td>{rec.bolusUnitPerHour}</td>
                     </tr>
                   )})}
                 </tbody>
@@ -855,6 +962,47 @@ function getEventDescription(port: string, type: string, level: string, value: s
   return desc
 }
 
+interface PumpAdRecord {
+  key: number
+  timestamp: string
+  datetime: string
+  rssi: string
+  deviceSn: string
+  autoMode: string
+  eventIndex: string
+  remainingCapacity: string
+  remainingInsulin: string
+  eventPort: string
+  eventType: string
+  eventLevel: string
+  eventValue: string
+  glucose: string
+  basalUnitPerHour: string
+  bolusUnitPerHour: string
+}
+
+function parsePumpAdRecord(line: string): Omit<PumpAdRecord, 'key'> | null {
+  const tsMatch = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})/)
+  if (!tsMatch) return null
+  return {
+    timestamp: tsMatch[1],
+    datetime: extractField(line, /datetime\s*=\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/),
+    rssi: extractField(line, /rssi\s*=\s*(-?\d+)/),
+    deviceSn: extractField(line, /deviceSn\s*=\s*'(\w+)'/),
+    autoMode: extractField(line, /autoMode\s*=\s*(true|false)/),
+    eventIndex: extractField(line, /eventIndex\s*=\s*(\d+)/),
+    remainingCapacity: extractField(line, /remainingCapacity\s*=\s*(\d+)/),
+    remainingInsulin: extractField(line, /remainingInsulin\s*=\s*(\d+)/),
+    eventPort: extractField(line, /eventPort\s*=\s*(\d+)/),
+    eventType: extractField(line, /eventType\s*=\s*(\d+)/),
+    eventLevel: extractField(line, /eventLevel\s*=\s*(\d+)/),
+    eventValue: extractField(line, /eventValue\s*=\s*(\d+)/),
+    glucose: extractField(line, /glucose\s*=\s*(-?\w+)/),
+    basalUnitPerHour: extractField(line, /basalUnitPerHour\s*=\s*([\d.]+)/),
+    bolusUnitPerHour: extractField(line, /bolusUnitPerHour\s*=\s*([\d.]+)/),
+  }
+}
+
 function extractField(line: string, regex: RegExp): string {
   const match = line.match(regex)
   return match?.[1] ?? '-'
@@ -903,6 +1051,32 @@ function isNetworkRequestLine(line: string): boolean {
     line.includes('----------End:')
 }
 
+const NETWORK_CATEGORIES = [
+  { key: 'userTrend', label: 'CGM广播', pattern: 'userTrend/saveOrUpdateUserTrend' },
+  { key: 'pumpStatusRecord', label: '泵体广播', pattern: 'pumpStatusRecord/savePumpStatusRecord' },
+  { key: 'pumpDeviceRegister', label: '泵体配对', pattern: 'pumpDevice/register' },
+  { key: 'pumpDeviceUnRegister', label: '泵体解配', pattern: 'pumpDevice/unRegister' },
+  { key: 'pumpData', label: '泵体历史', pattern: 'pumpData/savePumpData' },
+  { key: 'pumpSetting', label: '泵体参数', pattern: 'pumpSetting/savePumpSetting' },
+  { key: 'userSetting', label: '用户参数', pattern: 'userSetting/updateUserSetting' },
+  { key: 'pumpBasalRate', label: '基础率', pattern: 'pumpBasalRatePrepareSetting/saveBasalRatePrepareSetting' },
+  { key: 'pumpBolusRate', label: '大剂量预设', pattern: 'pumpBolusRatePrepareSetting/saveOrUpdate' },
+  { key: 'event', label: '事件', pattern: 'event/save' },
+  { key: 'cgmDeviceRegister', label: 'CGM配对', pattern: 'cgmDevice/userDeviceRegister' },
+  { key: 'cgmDeviceUnRegister', label: 'CGM解配', pattern: 'cgmDevice/deviceUnRegister' },
+  { key: 'cgmDeviceVerify', label: 'SN校验', pattern: 'cgmDevice/v2/verifySensorSn' },
+  { key: 'cgmRecordSave', label: 'CGM历史', pattern: 'cgmRecord/saveCgmRecord' },
+  { key: 'cgmRecordUpdate', label: 'CGM原始', pattern: 'cgmRecord/updateCgmRecord' },
+  { key: 'cgmCalibration', label: 'CGM校准', pattern: 'cgmCalibration/saveCalibration' },
+]
+
+function classifyNetworkRequest(url: string): string {
+  for (const cat of NETWORK_CATEGORIES) {
+    if (url.includes(cat.pattern)) return cat.key
+  }
+  return ''
+}
+
 interface NetworkRequest {
   key: number
   timestamp: string
@@ -912,6 +1086,7 @@ interface NetworkRequest {
   response: string
   duration: string
   code: number | null
+  category: string
 }
 
 function extractTimestamp(line: string): string {
