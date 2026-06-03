@@ -1,7 +1,8 @@
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Fira+Sans:wght@300;400;500;600;700&display=swap');
 
 :root {
   --accent: #e8a838;
+  --accent-strong: #d4920a;
   --accent-dim: rgba(232, 168, 56, 0.15);
   --accent-glow: rgba(232, 168, 56, 0.25);
   --bg: #0e1117;
@@ -10,15 +11,20 @@
   --border-strong: #3d4654;
   --heading: #eceff4;
   --input: #1c2129;
-  --label: #8b949e;
+  --label: #b8872e;
   --muted: #7d8590;
   --panel: #131820;
   --panel-soft: #111820;
+  --surface: #1c2129;
   --text: #c9d1d9;
   --success: #56d364;
+  --success-dim: rgba(86, 211, 100, 0.08);
+  --warning: #e8a838;
+  --warning-dim: rgba(232, 168, 56, 0.12);
   --error: #f85149;
-  --mono: 'JetBrains Mono', 'SF Mono', 'Cascadia Code', monospace;
-  --sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --error-dim: rgba(248, 81, 73, 0.08);
+  --mono: 'Fira Code', 'SF Mono', 'Cascadia Code', monospace;
+  --sans: 'Fira Sans', -apple-system, BlinkMacSystemFont, sans-serif;
 
   font-family: var(--sans);
   color: var(--text);
@@ -40,6 +46,10 @@ body {
 ::selection {
   background: var(--accent-dim);
   color: var(--heading);
+}
+
+body {
+  min-width: 320px;
 }
 
 ::-webkit-scrollbar {

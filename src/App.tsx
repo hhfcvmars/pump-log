@@ -253,7 +253,7 @@ function App() {
           <span className="mark">PL</span>
           <div className="brand-text">
             <h1>Pump Log</h1>
-            <p>日志分析工具</p>
+            <p>设备日志分析工作台</p>
           </div>
         </div>
 
@@ -264,6 +264,7 @@ function App() {
               value={notificationText}
               onChange={(event) => setNotificationText(event.target.value)}
               spellCheck={false}
+              aria-label="上传通知内容"
               placeholder="粘贴上传通知内容..."
             />
             <button
@@ -335,6 +336,14 @@ function App() {
                 导入
               </button>
             </div>
+            <input
+              className="compact-input file-filter"
+              value={fileQuery}
+              onChange={(event) => setFileQuery(event.target.value)}
+              placeholder="筛选文件"
+              aria-label="筛选文件"
+              disabled={!bundle}
+            />
           </div>
 
           <div className="file-table" role="listbox" aria-label="日志文件列表">
@@ -369,7 +378,12 @@ function App() {
             ))}
 
             {bundle && visibleEntries.length === 0 ? <div className="empty">没有匹配的文件</div> : null}
-            {!bundle ? <div className="empty" /> : null}
+            {!bundle ? (
+              <div className="empty file-empty">
+                <strong>还没有日志包</strong>
+                <span>粘贴上传通知、导入本地文件，或把文件拖到顶部区域。</span>
+              </div>
+            ) : null}
           </div>
         </aside>
 
@@ -384,8 +398,34 @@ function App() {
             />
           ) : (
             <div className="detail-empty">
-              <h2>等待日志</h2>
-              <p>导入后会在这里显示选中文件的详细内容。</p>
+              <span className="detail-empty-kicker">Ready for inspection</span>
+              <h2>{bundle ? '选择一个日志文件' : '导入日志开始分析'}</h2>
+              <p>
+                {bundle
+                  ? '左侧选择文件后，会在这里显示文本、表格化历史记录和网络请求。'
+                  : '支持上传通知、本地 zip/txt/xlog/json 文件，以及可用环境下的 USB PDA 日志导入。'}
+              </p>
+              {!bundle ? (
+                <div className="empty-actions">
+                  <button
+                    type="button"
+                    className="primary import-btn"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={status === 'loading'}
+                  >
+                    导入本地文件
+                  </button>
+                  <button
+                    type="button"
+                    className="pane-import usb-import"
+                    title={usbImportAvailable ? '通过 USB 从 PDA 导入日志' : '请使用支持 WebUSB 的 Chrome/Edge，或在本机 npm run dev 使用 ADB 导入'}
+                    onClick={importFromUsb}
+                    disabled={status === 'loading'}
+                  >
+                    USB 导入
+                  </button>
+                </div>
+              ) : null}
             </div>
           )}
         </section>
@@ -1332,7 +1372,7 @@ function NetworkCard({ request }: { request: NetworkRequest }) {
   }
 
   return (
-    <div className="net-card" style={isError ? { backgroundColor: '#fff0f0' } : undefined}>
+    <div className={isError ? 'net-card net-card-error' : 'net-card'}>
       <div className="net-card-head" onClick={() => setExpanded(!expanded)}>
         <span className="net-time">{request.timestamp.slice(11, 19)}</span>
         <span className="net-method" style={{ color: methodColor }}>{request.method}</span>
