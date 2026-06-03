@@ -24,7 +24,7 @@ export type ParsedNotification =
 const fileNamePattern = /fileName:\s*(.+?)(?:,\s*urlPath:|$)/i
 const urlPattern = /urlPath:\s*(\S+)/i
 const uploadTimePattern = /\[vcs\](\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/i
-const serialPattern = /(?:^|[_\s-])(D\d{3,}[A-Z]?\d*)(?:[_\s.-]|$)/i
+const serialPattern = /(?:^|[_\s-])(D[A-Z0-9]{3,})(?:[_\s.-]|$)/i
 const versionPattern = /(?:version|_)(\d+(?:\.\d+)+)(?=[_.-]|$)/i
 
 export function parseUploadNotification(text: string): ParsedNotification {

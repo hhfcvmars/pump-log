@@ -95,6 +95,18 @@ describe('inferArchiveMetadata', () => {
       password: 'PDA_D00099',
     })
   })
+
+  it('derives password for EXPORT_MTM archives with alphanumeric serial numbers', () => {
+    const meta = inferArchiveMetadata(
+      'EXPORT_MTM-Z2_D00ABC_Patch Pump PDA_version3.0.0_.zip',
+    )
+
+    expect(meta).toMatchObject({
+      serialNumber: 'D00ABC',
+      version: '3.0.0',
+      password: 'PDA_D00ABC',
+    })
+  })
 })
 
 describe('buildPassword', () => {
