@@ -456,6 +456,7 @@ function FileDetail({
   const [networkFilter, setNetworkFilter] = useState(false)
   const [deviceInfoFilter, setDeviceInfoFilter] = useState(false)
   const [cgmHistoryFilter, setCgmHistoryFilter] = useState(false)
+  const [pdaEventFilter, setPdaEventFilter] = useState(false)
   const [networkSubFilter, setNetworkSubFilter] = useState('')
   const logViewportRef = useRef<HTMLDivElement>(null)
   const [logScrollTop, setLogScrollTop] = useState(0)
@@ -463,7 +464,7 @@ function FileDetail({
   const normalizedQuery = contentQuery.trim().toLowerCase()
 
   const timeFilteredLines = useMemo(() => {
-    const hasFilter = bleFilter || pumpAdFilter || pumpHistoryFilter || networkFilter || deviceInfoFilter || cgmHistoryFilter
+    const hasFilter = bleFilter || pumpAdFilter || pumpHistoryFilter || networkFilter || deviceInfoFilter || cgmHistoryFilter || pdaEventFilter
 
     const result: { line: string; originalIndex: number }[] = []
     for (let i = 0; i < lines.length; i++) {
@@ -476,12 +477,13 @@ function FileDetail({
         if (networkFilter && !isNetworkRequestLine(line)) continue
         if (deviceInfoFilter && !isDeviceInfoLine(line)) continue
         if (cgmHistoryFilter && !isCgmHistoryLine(line)) continue
+        if (pdaEventFilter && !isPdaEventLine(line)) continue
       }
 
       result.push({ line, originalIndex: i })
     }
     return result
-  }, [lines, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter])
+  }, [lines, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter, pdaEventFilter])
 
   useEffect(() => {
     const node = logViewportRef.current
@@ -502,7 +504,7 @@ function FileDetail({
     if (!node) return
     node.scrollTop = 0
     setLogScrollTop(0)
-  }, [entry.id, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter])
+  }, [entry.id, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter, pdaEventFilter])
 
   useEffect(() => {
     if (networkFilter) return
@@ -588,6 +590,16 @@ function FileDetail({
       })
       .filter(Boolean) as CgmHistoryRecord[]
   }, [visibleLines, cgmHistoryFilter])
+
+  const pdaEventRecords = useMemo(() => {
+    if (!pdaEventFilter) return [] as PdaEventRecord[]
+    return visibleLines
+      .map(({ line, originalIndex }) => {
+        const rec = parsePdaEventRecord(line)
+        return rec ? { ...rec, key: originalIndex } : null
+      })
+      .filter(Boolean) as PdaEventRecord[]
+  }, [visibleLines, pdaEventFilter])
 
   const networkRequests = useMemo(() => {
     if (!networkFilter) return [] as NetworkRequest[]
@@ -676,7 +688,7 @@ function FileDetail({
             className={bleFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (bleFilter) { setBleFilter(false); return }
-              setBleFilter(true); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false)
+              setBleFilter(true); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false)
             }}
           >
             蓝牙日志
@@ -687,7 +699,7 @@ function FileDetail({
             className={pumpAdFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (pumpAdFilter) { setPumpAdFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(true); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false)
+              setBleFilter(false); setPumpAdFilter(true); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false)
             }}
           >
             泵体蓝牙广播
@@ -698,7 +710,7 @@ function FileDetail({
             className={pumpHistoryFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (pumpHistoryFilter) { setPumpHistoryFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(true); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false)
+              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(true); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false)
             }}
           >
             泵体历史
@@ -709,7 +721,7 @@ function FileDetail({
             className={networkFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (networkFilter) { setNetworkFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(true); setDeviceInfoFilter(false); setCgmHistoryFilter(false)
+              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(true); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false)
             }}
           >
             网络请求
@@ -720,7 +732,7 @@ function FileDetail({
             className={deviceInfoFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (deviceInfoFilter) { setDeviceInfoFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(true); setCgmHistoryFilter(false)
+              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(true); setCgmHistoryFilter(false); setPdaEventFilter(false)
             }}
           >
             设备信息
@@ -731,15 +743,26 @@ function FileDetail({
             className={cgmHistoryFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (cgmHistoryFilter) { setCgmHistoryFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(true)
+              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(true); setPdaEventFilter(false)
             }}
           >
             CGM历史
-            {cgmHistoryFilter ? <span className="chip-count">{cgmHistoryRecords.length}</span> : null}
-          </button>
-        </div>
+              {cgmHistoryFilter ? <span className="chip-count">{cgmHistoryRecords.length}</span> : null}
+            </button>
+            <button
+              type="button"
+              className={pdaEventFilter ? 'chip active' : 'chip'}
+              onClick={() => {
+                if (pdaEventFilter) { setPdaEventFilter(false); return }
+                setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(true)
+              }}
+            >
+              PDA事件
+              {pdaEventFilter ? <span className="chip-count">{pdaEventRecords.length}</span> : null}
+            </button>
+          </div>
         <span className="line-pill">{lineCount} 行</span>
-        {(cgmHistoryFilter || pumpHistoryFilter || pumpAdFilter) ? (
+        {(cgmHistoryFilter || pumpHistoryFilter || pumpAdFilter || pdaEventFilter) ? (
           <button type="button" className="export-btn" onClick={() => {
             if (cgmHistoryFilter) {
               downloadCsv(
@@ -752,6 +775,12 @@ function FileDetail({
                 ['日志时间', 'Pump时间', 'RSSI', 'deviceSn', 'autoMode', 'eventIndex', '剩余电量', '剩余胰岛素', 'eventPort', 'eventType', 'eventLevel', 'eventValue', 'glucose', '基础率', '大剂量'],
                 pumpAdRecords.map(r => [r.timestamp, r.datetime, r.rssi, r.deviceSn, r.autoMode, r.eventIndex, r.remainingCapacity, r.remainingInsulin, r.eventPort, r.eventType, r.eventLevel, r.eventValue, r.glucose, r.basalUnitPerHour, r.bolusUnitPerHour]),
                 'pump_ad.csv'
+              )
+            } else if (pdaEventFilter) {
+              downloadCsv(
+                ['日期时间', 'event', 'hasUpload', 'deviceSn', 'content'],
+                pdaEventRecords.map(r => [r.dateTime, r.event, r.hasUpload, r.deviceSn, r.content]),
+                'pda_event.csv'
               )
             } else {
               downloadCsv(
@@ -819,6 +848,31 @@ function FileDetail({
                 ) : null}
               </div>
             </>
+          ) : pdaEventFilter ? (
+            <div className="history-table-wrap">
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    <th>hasUpload</th>
+                    <th>dateTime</th>
+                    <th>event</th>
+                    <th>deviceSn</th>
+                    <th>content</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pdaEventRecords.map((rec) => (
+                    <tr key={rec.key}>
+                      <td>{rec.hasUpload}</td>
+                      <td>{rec.dateTime}</td>
+                      <td>{rec.event}</td>
+                      <td>{rec.deviceSn}</td>
+                      <td>{rec.content}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : cgmHistoryFilter ? (
             <div className="history-table-wrap">
               <table className="history-table">
@@ -1197,6 +1251,42 @@ function isDeviceInfoLine(line: string): boolean {
 
 function isCgmHistoryLine(line: string): boolean {
   return line.includes('AidexXHistory')
+}
+
+function isPdaEventLine(line: string): boolean {
+  return line.includes('PdaEventEntity(')
+}
+
+interface PdaEventRecord {
+  key: number
+  hasUpload: string
+  dateTime: string
+  event: string
+  deviceSn: string
+  content: string
+}
+
+function parsePdaEventRecord(line: string): Omit<PdaEventRecord, 'key'> | null {
+  if (!isPdaEventLine(line)) return null
+
+  const extract = (field: string): string => {
+    const re = new RegExp(field + '\\s*=\\s*([^,\\)]*)')
+    const m = line.match(re)
+    if (!m) return ''
+    const val = m[1].trim()
+    return val === 'null' ? '' : val
+  }
+
+  const dateTime = extract('dateTime')
+  if (!dateTime) return null
+
+  return {
+    hasUpload: extract('hasUpload'),
+    dateTime,
+    event: extract('event'),
+    deviceSn: extract('deviceSn'),
+    content: extract('content'),
+  }
 }
 
 interface CgmHistoryRecord {
