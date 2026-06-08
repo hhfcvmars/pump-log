@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   createWebUsbExportName,
   createWebUsbPdaLogErrorMessage,
+  selectWebUsbJsonEntries,
   selectWebUsbPdaLogEntries,
   streamToBlob,
   type WebUsbPdaLogEntry,
@@ -25,6 +26,23 @@ describe('selectWebUsbPdaLogEntries', () => {
       { name: '2026-05-31', size: 857351 },
       { name: '2026-06-01', size: 7298569 },
       { name: '2026-06-02', size: 28601778 },
+    ])
+  })
+})
+
+describe('selectWebUsbJsonEntries', () => {
+  it('selects JSON files and skips files over 100 MB', () => {
+    const entries: WebUsbPdaLogEntry[] = [
+      { name: 'config.json', size: 1234 },
+      { name: 'large_log.json', size: 105 * 1024 * 1024 },
+      { name: 'event_log.json', size: 56789 },
+      { name: '2026-06-01', size: 7298569 },
+      { name: 'password_info.txt', size: 294 },
+    ]
+
+    expect(selectWebUsbJsonEntries(entries)).toEqual([
+      { name: 'config.json', size: 1234 },
+      { name: 'event_log.json', size: 56789 },
     ])
   })
 })

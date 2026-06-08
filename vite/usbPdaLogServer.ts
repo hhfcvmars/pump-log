@@ -9,6 +9,7 @@ import type { Plugin, ViteDevServer } from 'vite'
 const execFileAsync = promisify(execFile)
 
 const remotePdaLogDir = '/sdcard/Android/data/com.microtechmd.pda/cache/pdaLog'
+const remotePdaCacheDir = '/sdcard/Android/data/com.microtechmd.pda/cache'
 const usbRoute = '/api/usb/pda-log'
 const maxUsbLogBytes = 100 * 1024 * 1024
 const recentLogDays = 5
@@ -105,6 +106,27 @@ export function selectRecentDateLogs(entries: RemoteDateLogEntry[], now = new Da
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 
+export function parseRemoteJsonEntries(output: string): RemoteDateLogEntry[] {
+  return output
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .map((line) => {
+      const match = line.match(/^-[-\w]+\s+\d+\s+\S+\s+\S+\s+(\d+)\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+(.+\.json)$/i)
+      if (!match) return undefined
+      return {
+        size: Number(match[1]),
+        name: match[2],
+      }
+    })
+    .filter((entry): entry is RemoteDateLogEntry => Boolean(entry))
+}
+
+export function selectRemoteLogJsons(entries: RemoteDateLogEntry[]): RemoteDateLogEntry[] {
+  return entries
+    .filter((entry) => entry.size <= maxUsbLogBytes)
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
 export function usbPdaLogPlugin(): Plugin {
   return {
     name: 'pump-log-usb-pda-log',
@@ -141,16 +163,24 @@ function registerUsbPdaLogRoute(server: ViteDevServer) {
 async function exportPdaLog(): Promise<ExportResult> {
   const device = await getSingleAuthorizedDevice()
   const tempRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'pump-log-usb-'))
-  const logEntries = await listRecentRemoteDateLogs(device.serial)
+  const dateLogEntries = await listRecentRemoteDateLogs(device.serial)
+  const jsonEntries = await listRemoteJsonLogs(device.serial)
 
-  if (logEntries.length === 0) {
-    throw new Error('未找到符合条件的 PDA 日期日志：仅导入最近 5 天、文件名为 yyyy-MM-dd、且单文件不超过 100MB 的日志')
+  if (dateLogEntries.length === 0 && jsonEntries.length === 0) {
+    throw new Error('未找到符合条件的 PDA 日志文件（日期日志或 JSON 文件）')
   }
 
   const localFiles: string[] = []
-  for (const entry of logEntries) {
+
+  for (const entry of dateLogEntries) {
     const localPath = path.join(tempRoot, entry.name)
     await runAdb(['-s', device.serial, 'pull', `${remotePdaLogDir}/${entry.name}`, localPath])
+    localFiles.push(localPath)
+  }
+
+  for (const entry of jsonEntries) {
+    const localPath = path.join(tempRoot, entry.name)
+    await runAdb(['-s', device.serial, 'pull', `${remotePdaCacheDir}/${entry.name}`, localPath])
     localFiles.push(localPath)
   }
 
@@ -198,6 +228,15 @@ async function listRecentRemoteDateLogs(serial: string): Promise<RemoteDateLogEn
   try {
     const { stdout } = await runAdb(['-s', serial, 'shell', 'ls', '-la', remotePdaLogDir])
     return selectRecentDateLogs(parseRemoteDateLogEntries(stdout))
+  } catch {
+    return []
+  }
+}
+
+async function listRemoteJsonLogs(serial: string): Promise<RemoteDateLogEntry[]> {
+  try {
+    const { stdout } = await runAdb(['-s', serial, 'shell', 'ls', '-la', remotePdaCacheDir])
+    return selectRemoteLogJsons(parseRemoteJsonEntries(stdout))
   } catch {
     return []
   }

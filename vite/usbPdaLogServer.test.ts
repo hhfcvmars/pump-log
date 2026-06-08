@@ -4,7 +4,9 @@ import {
   parseAdbDevices,
   parsePasswordInfo,
   parseRemoteDateLogEntries,
+  parseRemoteJsonEntries,
   selectRecentDateLogs,
+  selectRemoteLogJsons,
 } from './usbPdaLogServer'
 
 describe('parseAdbDevices', () => {
@@ -63,6 +65,47 @@ PDA序列号: D00001
       version: '3.0.0',
       password: 'PDA_D00001',
     })
+  })
+})
+
+describe('parseRemoteJsonEntries', () => {
+  it('extracts .json files with name and size from ls -la output', () => {
+    const entries = parseRemoteJsonEntries(`total 1728952
+drwxrwx--x 2 system sdcard_rw      4096 2026-06-02 13:49 .
+drwxrwx--x 3 system sdcard_rw      4096 2026-06-02 15:23 ..
+-rw-rw---- 1 system sdcard_rw      1234 2026-06-02 13:49 config.json
+-rw-rw---- 1 system sdcard_rw     56789 2026-06-02 13:49 event_log.json
+-rw-rw---- 1 system sdcard_rw 365561360 2026-05-21 23:59 2026-05-21
+-rw-rw---- 1 system sdcard_rw      9876 2026-06-02 13:49 settings.json
+-rw-rw---- 1 system sdcard_rw       294 2026-06-02 13:49 password_info.txt
+`)
+
+    expect(entries).toEqual([
+      { name: 'config.json', size: 1234 },
+      { name: 'event_log.json', size: 56789 },
+      { name: 'settings.json', size: 9876 },
+    ])
+  })
+
+  it('returns an empty list when no JSON files are found', () => {
+    expect(parseRemoteJsonEntries(`total 0
+-rw-rw---- 1 system sdcard_rw 365561360 2026-05-21 23:59 2026-05-21
+`)).toEqual([])
+  })
+})
+
+describe('selectRemoteLogJsons', () => {
+  it('selects JSON files and skips files over 100 MB', () => {
+    const entries = [
+      { name: 'config.json', size: 1234 },
+      { name: 'large_log.json', size: 105 * 1024 * 1024 },
+      { name: 'event_log.json', size: 56789 },
+    ]
+
+    expect(selectRemoteLogJsons(entries)).toEqual([
+      { name: 'config.json', size: 1234 },
+      { name: 'event_log.json', size: 56789 },
+    ])
   })
 })
 

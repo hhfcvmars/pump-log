@@ -5,6 +5,7 @@ import { BlobReader, BlobWriter, ZipWriter } from '@zip.js/zip.js'
 import type { UsbPdaLogArchive } from './usbPdaLogClient'
 
 const remotePdaLogDir = '/sdcard/Android/data/com.microtechmd.pda/cache/pdaLog'
+const remotePdaCacheDir = '/sdcard/Android/data/com.microtechmd.pda/cache'
 const maxUsbLogBytes = 100 * 1024 * 1024
 const recentLogDays = 5
 
@@ -52,7 +53,7 @@ export async function downloadWebUsbPdaLogArchive(): Promise<UsbPdaLogArchive> {
     try {
       const files = await readRecentPdaLogFiles(adb)
       if (files.length === 0) {
-        throw new Error('未找到符合条件的 PDA 日期日志：仅导入最近 5 天、文件名为 yyyy-MM-dd、且单文件不超过 100MB 的日志')
+        throw new Error('未找到符合条件的 PDA 日志文件（日期日志或 JSON 文件）')
       }
 
       return {
@@ -74,6 +75,12 @@ export function selectWebUsbPdaLogEntries(entries: WebUsbPdaLogEntry[], now = ne
 
   return entries
     .filter((entry) => allowedNames.has(entry.name) && Number(entry.size) <= maxUsbLogBytes)
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+export function selectWebUsbJsonEntries(entries: WebUsbPdaLogEntry[]): WebUsbPdaLogEntry[] {
+  return entries
+    .filter((entry) => /\.json$/i.test(entry.name) && Number(entry.size) <= maxUsbLogBytes)
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 
@@ -117,13 +124,21 @@ async function readRecentPdaLogFiles(adb: Adb): Promise<WebUsbPdaLogFile[]> {
   const sync = await adb.sync()
 
   try {
-    const entries = selectWebUsbPdaLogEntries(await sync.readdir(remotePdaLogDir))
+    const logEntries = selectWebUsbPdaLogEntries(await sync.readdir(remotePdaLogDir))
+    const jsonEntries = selectWebUsbJsonEntries(await sync.readdir(remotePdaCacheDir))
     const files: WebUsbPdaLogFile[] = []
 
-    for (const entry of entries) {
+    for (const entry of logEntries) {
       files.push({
         name: entry.name,
         blob: await streamToBlob(sync.read(`${remotePdaLogDir}/${entry.name}`), 'text/plain'),
+      })
+    }
+
+    for (const entry of jsonEntries) {
+      files.push({
+        name: entry.name,
+        blob: await streamToBlob(sync.read(`${remotePdaCacheDir}/${entry.name}`), 'text/plain'),
       })
     }
 
