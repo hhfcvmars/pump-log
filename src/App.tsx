@@ -176,15 +176,27 @@ function App() {
     setMessage('')
   }
 
-  function handleLocalFile(file: File) {
+  async function handleLocalFile(file: File) {
     if (/\.(txt|xlog|json)$/i.test(file.name)) {
       void importTextFile(file)
       return
     }
 
-    setSelectedFile(file)
+    if (await isZipFile(file)) {
+      setSelectedFile(file)
+      void importLocalFile(file)
+      return
+    }
 
-    void importLocalFile(file)
+    void importTextFile(file)
+  }
+
+  async function isZipFile(file: File): Promise<boolean> {
+    const slice = file.slice(0, 2)
+    const buffer = await slice.arrayBuffer()
+    if (buffer.byteLength < 2) return false
+    const bytes = new Uint8Array(buffer)
+    return bytes[0] === 0x50 && bytes[1] === 0x4b
   }
 
   async function importTextFile(file: File) {
@@ -293,7 +305,6 @@ function App() {
           ref={fileInputRef}
           className="file-input"
           type="file"
-          accept=".zip,.txt,.xlog,.json,application/zip,text/plain,application/json"
           onChange={(event) => {
             const file = event.target.files?.item(0)
 
@@ -457,6 +468,8 @@ function FileDetail({
   const [deviceInfoFilter, setDeviceInfoFilter] = useState(false)
   const [cgmHistoryFilter, setCgmHistoryFilter] = useState(false)
   const [pdaEventFilter, setPdaEventFilter] = useState(false)
+  const [iobFilter, setIobFilter] = useState(false)
+  const [alarmFilter, setAlarmFilter] = useState(false)
   const [networkSubFilter, setNetworkSubFilter] = useState('')
   const logViewportRef = useRef<HTMLDivElement>(null)
   const [logScrollTop, setLogScrollTop] = useState(0)
@@ -464,7 +477,7 @@ function FileDetail({
   const normalizedQuery = contentQuery.trim().toLowerCase()
 
   const timeFilteredLines = useMemo(() => {
-    const hasFilter = bleFilter || pumpAdFilter || pumpHistoryFilter || networkFilter || deviceInfoFilter || cgmHistoryFilter || pdaEventFilter
+    const hasFilter = bleFilter || pumpAdFilter || pumpHistoryFilter || networkFilter || deviceInfoFilter || cgmHistoryFilter || pdaEventFilter || iobFilter || alarmFilter
 
     const result: { line: string; originalIndex: number }[] = []
     for (let i = 0; i < lines.length; i++) {
@@ -478,12 +491,14 @@ function FileDetail({
         if (deviceInfoFilter && !isDeviceInfoLine(line)) continue
         if (cgmHistoryFilter && !isCgmHistoryLine(line)) continue
         if (pdaEventFilter && !isPdaEventLine(line)) continue
+        if (iobFilter && !isIobLine(line)) continue
+        if (alarmFilter && !isAlarmLine(line)) continue
       }
 
       result.push({ line, originalIndex: i })
     }
     return result
-  }, [lines, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter, pdaEventFilter])
+  }, [lines, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter, pdaEventFilter, iobFilter, alarmFilter])
 
   useEffect(() => {
     const node = logViewportRef.current
@@ -504,7 +519,7 @@ function FileDetail({
     if (!node) return
     node.scrollTop = 0
     setLogScrollTop(0)
-  }, [entry.id, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter, pdaEventFilter])
+  }, [entry.id, bleFilter, pumpAdFilter, pumpHistoryFilter, networkFilter, deviceInfoFilter, cgmHistoryFilter, pdaEventFilter, iobFilter, alarmFilter])
 
   useEffect(() => {
     if (networkFilter) return
@@ -601,6 +616,16 @@ function FileDetail({
       .filter(Boolean) as PdaEventRecord[]
   }, [visibleLines, pdaEventFilter])
 
+  const alarmRecords = useMemo(() => {
+    if (!alarmFilter) return [] as AlarmRecord[]
+    return visibleLines
+      .map(({ line, originalIndex }) => {
+        const rec = parseAlarmRecord(line)
+        return rec ? { ...rec, key: originalIndex } : null
+      })
+      .filter(Boolean) as AlarmRecord[]
+  }, [visibleLines, alarmFilter])
+
   const networkRequests = useMemo(() => {
     if (!networkFilter) return [] as NetworkRequest[]
     const requests: NetworkRequest[] = []
@@ -688,7 +713,7 @@ function FileDetail({
             className={bleFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (bleFilter) { setBleFilter(false); return }
-              setBleFilter(true); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false)
+              setBleFilter(true); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false); setIobFilter(false); setAlarmFilter(false)
             }}
           >
             蓝牙日志
@@ -699,7 +724,7 @@ function FileDetail({
             className={pumpAdFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (pumpAdFilter) { setPumpAdFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(true); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false)
+              setBleFilter(false); setPumpAdFilter(true); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false); setIobFilter(false); setAlarmFilter(false)
             }}
           >
             泵体蓝牙广播
@@ -710,7 +735,7 @@ function FileDetail({
             className={pumpHistoryFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (pumpHistoryFilter) { setPumpHistoryFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(true); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false)
+              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(true); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false); setIobFilter(false); setAlarmFilter(false)
             }}
           >
             泵体历史
@@ -721,7 +746,7 @@ function FileDetail({
             className={networkFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (networkFilter) { setNetworkFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(true); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false)
+              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(true); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false); setIobFilter(false); setAlarmFilter(false)
             }}
           >
             网络请求
@@ -732,7 +757,7 @@ function FileDetail({
             className={deviceInfoFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (deviceInfoFilter) { setDeviceInfoFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(true); setCgmHistoryFilter(false); setPdaEventFilter(false)
+              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(true); setCgmHistoryFilter(false); setPdaEventFilter(false); setIobFilter(false); setAlarmFilter(false)
             }}
           >
             设备信息
@@ -743,7 +768,7 @@ function FileDetail({
             className={cgmHistoryFilter ? 'chip active' : 'chip'}
             onClick={() => {
               if (cgmHistoryFilter) { setCgmHistoryFilter(false); return }
-              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(true); setPdaEventFilter(false)
+              setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(true); setPdaEventFilter(false); setIobFilter(false); setAlarmFilter(false)
             }}
           >
             CGM历史
@@ -754,15 +779,37 @@ function FileDetail({
               className={pdaEventFilter ? 'chip active' : 'chip'}
               onClick={() => {
                 if (pdaEventFilter) { setPdaEventFilter(false); return }
-                setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(true)
+                setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(true); setIobFilter(false); setAlarmFilter(false)
               }}
             >
               PDA事件
               {pdaEventFilter ? <span className="chip-count">{pdaEventRecords.length}</span> : null}
             </button>
+            <button
+              type="button"
+              className={iobFilter ? 'chip active' : 'chip'}
+              onClick={() => {
+                if (iobFilter) { setIobFilter(false); return }
+                setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false); setIobFilter(true); setAlarmFilter(false)
+              }}
+            >
+              IOB
+              {iobFilter ? <span className="chip-count">{timeFilteredLines.length}</span> : null}
+            </button>
+            <button
+              type="button"
+              className={alarmFilter ? 'chip active' : 'chip'}
+              onClick={() => {
+                if (alarmFilter) { setAlarmFilter(false); return }
+                setBleFilter(false); setPumpAdFilter(false); setPumpHistoryFilter(false); setNetworkFilter(false); setDeviceInfoFilter(false); setCgmHistoryFilter(false); setPdaEventFilter(false); setIobFilter(false); setAlarmFilter(true)
+              }}
+            >
+              报警
+              {alarmFilter ? <span className="chip-count">{timeFilteredLines.length}</span> : null}
+            </button>
           </div>
         <span className="line-pill">{lineCount} 行</span>
-        {(cgmHistoryFilter || pumpHistoryFilter || pumpAdFilter || pdaEventFilter) ? (
+        {(cgmHistoryFilter || pumpHistoryFilter || pumpAdFilter || pdaEventFilter || alarmFilter) ? (
           <button type="button" className="export-btn" onClick={() => {
             if (cgmHistoryFilter) {
               downloadCsv(
@@ -781,6 +828,12 @@ function FileDetail({
                 ['日期时间', 'event', 'hasUpload', 'deviceSn', 'content'],
                 pdaEventRecords.map(r => [r.dateTime, r.event, r.hasUpload, r.deviceSn, r.content]),
                 'pda_event.csv'
+              )
+            } else if (alarmFilter) {
+              downloadCsv(
+                ['日志时间', 'deviceSn', 'autoMode', 'eventIndex', '剩余电量', '剩余胰岛素', 'datetime', 'eventPort', 'eventType', 'eventLevel', 'eventValue', '基础率', '大剂量', '内容'],
+                alarmRecords.map(r => [r.timestamp, r.deviceSn, r.autoMode, r.eventIndex, r.remainingCapacity, r.remainingInsulin, r.datetime, r.eventPort, r.eventType, r.eventLevel, r.eventValue, r.basalUnitPerHour, r.bolusUnitPerHour, getEventDescription(r.eventPort, r.eventType, r.eventLevel, r.eventValue)]),
+                'alarm.csv'
               )
             } else {
               downloadCsv(
@@ -951,6 +1004,73 @@ function FileDetail({
                           title="复制原始日志"
                           onClick={async () => {
                             await navigator.clipboard.writeText(rec!.rawLine)
+                            const btn = document.activeElement as HTMLElement
+                            if (btn) {
+                              btn.style.color = '#56d364'
+                              setTimeout(() => { btn.style.color = '' }, 1200)
+                            }
+                          }}
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  )})}
+                </tbody>
+              </table>
+            </div>
+          ) : alarmFilter ? (
+            <div className="history-table-wrap">
+              <table className="history-table">
+                <thead>
+                  <tr>
+                    <th>日志时间</th>
+                    <th>deviceSn</th>
+                    <th>autoMode</th>
+                    <th>eventIndex</th>
+                    <th>剩余电量</th>
+                    <th>剩余胰岛素</th>
+                    <th>datetime</th>
+                    <th>eventPort</th>
+                    <th>eventType</th>
+                    <th>eventLevel</th>
+                    <th>eventValue</th>
+                    <th>基础率</th>
+                    <th>大剂量</th>
+                    <th>内容</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {alarmRecords.map((rec) => {
+                    const level = parseInt(rec.eventLevel, 10)
+                    const rowClass = level === 2 ? 'row-alarm-high' : level === 1 ? 'row-alarm-low' : undefined
+                    return (
+                    <tr key={rec.key} className={rowClass}>
+                      <td>{rec.timestamp}</td>
+                      <td>{rec.deviceSn}</td>
+                      <td>{rec.autoMode}</td>
+                      <td>{rec.eventIndex}</td>
+                      <td>{rec.remainingCapacity}</td>
+                      <td>{rec.remainingInsulin}</td>
+                      <td>{rec.datetime}</td>
+                      <td>{rec.eventPort}</td>
+                      <td>{rec.eventType}</td>
+                      <td>{rec.eventLevel}</td>
+                      <td>{rec.eventValue}</td>
+                      <td>{rec.basalUnitPerHour}</td>
+                      <td>{rec.bolusUnitPerHour}</td>
+                      <td>{getEventDescription(rec.eventPort, rec.eventType, rec.eventLevel, rec.eventValue)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="copy-btn"
+                          title="复制原始日志"
+                          onClick={async () => {
+                            await navigator.clipboard.writeText(rec.rawLine)
                             const btn = document.activeElement as HTMLElement
                             if (btn) {
                               btn.style.color = '#56d364'
@@ -1255,6 +1375,53 @@ function isCgmHistoryLine(line: string): boolean {
 
 function isPdaEventLine(line: string): boolean {
   return line.includes('PdaEventEntity(')
+}
+
+function isIobLine(line: string): boolean {
+  return line.includes('IOB计算完成，总量:')
+}
+
+function isAlarmLine(line: string): boolean {
+  return line.includes('广播收到报警：')
+}
+
+interface AlarmRecord {
+  key: number
+  timestamp: string
+  deviceSn: string
+  autoMode: string
+  eventIndex: string
+  remainingCapacity: string
+  remainingInsulin: string
+  datetime: string
+  eventPort: string
+  eventType: string
+  eventLevel: string
+  eventValue: string
+  basalUnitPerHour: string
+  bolusUnitPerHour: string
+  rawLine: string
+}
+
+function parseAlarmRecord(line: string): Omit<AlarmRecord, 'key'> | null {
+  const ts = extractTimestamp(line)
+  if (!ts) return null
+  return {
+    timestamp: ts,
+    deviceSn: extractField(line, /deviceSn\s*=\s*'([^']+)'/),
+    autoMode: extractField(line, /autoMode\s*=\s*(true|false)/),
+    eventIndex: extractField(line, /eventIndex\s*=\s*(\d+)/),
+    remainingCapacity: extractField(line, /remainingCapacity\s*=\s*(\d+)/),
+    remainingInsulin: extractField(line, /remainingInsulin\s*=\s*(\d+)/),
+    datetime: extractField(line, /datetime\s*=\s*(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/),
+    eventPort: extractField(line, /eventPort\s*=\s*(\d+)/),
+    eventType: extractField(line, /eventType\s*=\s*(\d+)/),
+    eventLevel: extractField(line, /eventLevel\s*=\s*(\d+)/),
+    eventValue: extractField(line, /eventValue\s*=\s*(\d+)/),
+    basalUnitPerHour: extractField(line, /basalUnitPerHour\s*=\s*([\d.]+)/),
+    bolusUnitPerHour: extractField(line, /bolusUnitPerHour\s*=\s*([\d.]+)/),
+    rawLine: line,
+  }
 }
 
 interface PdaEventRecord {
