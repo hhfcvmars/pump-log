@@ -178,17 +178,17 @@ function App() {
 
   async function handleLocalFile(file: File) {
     if (/\.(txt|xlog|json)$/i.test(file.name)) {
-      void importTextFile(file)
+      await importTextFiles([file])
       return
     }
 
     if (await isZipFile(file)) {
       setSelectedFile(file)
-      void importLocalFile(file)
+      await importLocalFile(file)
       return
     }
 
-    void importTextFile(file)
+    await importTextFiles([file])
   }
 
   async function isZipFile(file: File): Promise<boolean> {
@@ -199,37 +199,57 @@ function App() {
     return bytes[0] === 0x50 && bytes[1] === 0x4b
   }
 
-  async function importTextFile(file: File) {
+  async function handleFiles(files: FileList | null) {
+    if (!files || files.length === 0) return
+    const fileArray = Array.from(files)
+
+    if (fileArray.length === 1) {
+      await handleLocalFile(fileArray[0])
+      return
+    }
+
+    const hasZip = fileArray.some((file) => file.name.toLowerCase().endsWith('.zip'))
+    if (hasZip) {
+      setStatus('error')
+      setMessage('压缩包每次只能导入一个，请单独选择 zip 文件')
+      return
+    }
+
+    await importTextFiles(fileArray)
+  }
+
+  async function readTextFileEntry(file: File): Promise<RawArchiveEntry> {
+    let text: string
+
+    if (/\.xlog$/i.test(file.name)) {
+      const buf = await file.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      text = isXLogByMagic(bytes) ? await parseXLog(bytes) : await file.text()
+    } else {
+      text = await file.text()
+    }
+
+    return {
+      path: file.name,
+      size: file.size,
+      lastModified: new Date(file.lastModified),
+      text,
+      data: file,
+    }
+  }
+
+  async function importTextFiles(files: File[]) {
+    if (files.length === 0) return
     setStatus('loading')
     setProgress(null)
-    setMessage(`正在读取 ${file.name}`)
+    setMessage(files.length === 1 ? `正在读取 ${files[0].name}` : `正在读取 ${files.length} 个文件`)
 
     try {
-      let text: string
-
-      if (/\.xlog$/i.test(file.name)) {
-        const buf = await file.arrayBuffer()
-        const bytes = new Uint8Array(buf)
-        if (isXLogByMagic(bytes)) {
-          text = await parseXLog(bytes)
-        } else {
-          text = await file.text()
-        }
-      } else {
-        text = await file.text()
-      }
-
-      const entry: RawArchiveEntry = {
-        path: file.name,
-        size: file.size,
-        lastModified: new Date(file.lastModified),
-        text,
-        data: file,
-      }
+      const entries = await Promise.all(files.map(readTextFileEntry))
       const nextBundle = createLogBundle({
-        sourceName: file.name,
+        sourceName: files.length === 1 ? files[0].name : `${files.length} 个文件`,
         password: '',
-        entries: [entry],
+        entries,
       })
       setBundle(nextBundle)
       setSelectedEntryId(undefined)
@@ -247,11 +267,7 @@ function App() {
 
   function handleDrop(event: React.DragEvent<HTMLDivElement>) {
     event.preventDefault()
-    const file = event.dataTransfer.files.item(0)
-
-    if (file) {
-      handleLocalFile(file)
-    }
+    void handleFiles(event.dataTransfer.files)
   }
 
   return (
@@ -305,12 +321,9 @@ function App() {
           ref={fileInputRef}
           className="file-input"
           type="file"
+          multiple
           onChange={(event) => {
-            const file = event.target.files?.item(0)
-
-            if (file) {
-              handleLocalFile(file)
-            }
+            void handleFiles(event.target.files)
           }}
         />
       </section>
