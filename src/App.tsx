@@ -1225,7 +1225,7 @@ function isBluetoothLine(line: string): boolean {
 }
 
 function isPumpAdLine(line: string): boolean {
-  return line.includes('Pump AD')
+  return line.includes('Pump AD') || line.includes('PUMP广播 false PumpEntity')
 }
 
 function isPumpHistoryLine(line: string): boolean {
